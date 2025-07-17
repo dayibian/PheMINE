@@ -6,6 +6,7 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.metrics import precision_score, ConfusionMatrixDisplay, roc_curve, roc_auc_score
+from sklearn.neural_network import MLPClassifier
 try:
     from xgboost import XGBClassifier
 except ImportError:
@@ -20,6 +21,7 @@ import yaml
 
 import logging, sys, argparse
 from pathlib import Path
+from typing import List, Tuple, Dict, Any, Optional, Union
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -37,7 +39,7 @@ full_name = {
     'hpp': 'Hypophosphatasia'
 }
 
-def setup_log(fn_log, mode='w'):
+def setup_log(fn_log: Union[str, Path], mode: str = 'w') -> None:
     '''
     Print log message to console and write to a log file.
     Will overwrite existing log file by default
@@ -45,15 +47,17 @@ def setup_log(fn_log, mode='w'):
     - fn_log: name of the log file
     - mode: writing mode. Change mode='a' for appending
     '''
-    # f string is not fully compatible with logging, so use %s for string formatting
+    # Remove any existing handlers to avoid duplicate logs
     logging.root.handlers = [] # Remove potential handler set up by others (especially in google colab)
     logging.basicConfig(level=logging.DEBUG,
                         handlers=[logging.FileHandler(filename=fn_log, mode=mode),
                                   logging.StreamHandler()], format='%(message)s')
 
-def process_args():
+def process_args() -> argparse.Namespace:
     '''
-    Process arguments
+    Process command-line arguments and set up logging.
+    Returns:
+        argparse.Namespace: Parsed arguments
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_folder', help='High-level folder that contains data for each trait', type=str,
@@ -83,9 +87,19 @@ def process_args():
 
     return args
 
-def get_phecode_features(data_path, output_path, trait):
+def get_phecode_features(
+    data_path: Path,
+    output_path: Path,
+    trait: str
+) -> List[str]:
     '''
     Get enriched phecodes, drop those used for phenotyping.
+    Args:
+        data_path (Path): Path to data directory
+        output_path (Path): Path to output directory
+        trait (str): Trait of interest
+    Returns:
+        List[str]: List of phecode features (excluding those used for phenotyping)
     '''
     
     icd_codes = {
@@ -118,11 +132,25 @@ def get_phecode_features(data_path, output_path, trait):
         phecode_features_.remove(code)
     return phecode_features_
 
-def train_model(X_train, y_train, model_type='RF', random_state=42, verbose=2, n_jobs=-1):
+def train_model(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_type: str = 'RF',
+    random_state: int = 42,
+    verbose: int = 2,
+    n_jobs: int = -1
+) -> Any:
     '''
     Train a machine learning model with hyperparameter tuning.
-    model_type: 'CART', 'RF', or 'XG'
-    Returns the best trained model.
+    Args:
+        X_train (pd.DataFrame): Training features
+        y_train (pd.Series): Training labels
+        model_type (str): 'CART', 'RF', 'XG', or 'NN'/'MLP'
+        random_state (int): Random seed
+        verbose (int): Verbosity level
+        n_jobs (int): Number of parallel jobs
+    Returns:
+        Any: The best trained model
     '''
     if model_type.upper() == 'CART':
         m = X_train.shape[1]
@@ -156,8 +184,18 @@ def train_model(X_train, y_train, model_type='RF', random_state=42, verbose=2, n
         }
         base_model = XGBClassifier(eval_metric='logloss', random_state=random_state, use_label_encoder=False)
         n_iter = 20
+    elif model_type.upper() in ['NN', 'MLP']:
+        param_dist = {
+            'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 50), (100, 100)],
+            'activation': ['relu', 'tanh', 'logistic'],
+            'solver': ['adam', 'sgd'],
+            'alpha': [0.0001, 0.001, 0.01],
+            'learning_rate': ['constant', 'adaptive'],
+        }
+        base_model = MLPClassifier(max_iter=500, random_state=random_state)
+        n_iter = 20
     else:
-        raise ValueError(f"Unknown model_type: {model_type}. Choose from 'CART', 'RF', or 'XG'.")
+        raise ValueError(f"Unknown model_type: {model_type}. Choose from 'CART', 'RF', 'XG', or 'NN'/'MLP'.")
 
     random_search = RandomizedSearchCV(
         estimator=base_model,
@@ -175,9 +213,25 @@ def train_model(X_train, y_train, model_type='RF', random_state=42, verbose=2, n
     return best_model
 
 
-def plot_CM(model, X, y, output_path, trait, prefix):
+def plot_CM(
+    model: Any,
+    X: pd.DataFrame,
+    y: pd.Series,
+    output_path: Path,
+    trait: str,
+    prefix: str
+) -> float:
     '''
     Plot confusion matrix for testing data.
+    Args:
+        model (Any): Trained model
+        X (pd.DataFrame): Features
+        y (pd.Series): Labels
+        output_path (Path): Output directory
+        trait (str): Trait name
+        prefix (str): Output file prefix
+    Returns:
+        float: Precision score
     '''
     class_names = ['Control', full_name[trait]]
     disp = ConfusionMatrixDisplay.from_estimator(
@@ -192,9 +246,25 @@ def plot_CM(model, X, y, output_path, trait, prefix):
     plt.savefig(output_path / f'{trait}_CM_{prefix}.png', bbox_inches='tight')
     return p
 
-def plot_ROC(final_model, X_test, y_test, output_path, trait, prefix):
+def plot_ROC(
+    final_model: Any,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    output_path: Path,
+    trait: str,
+    prefix: str
+) -> float:
     '''
     Plot ROC curve for testing data.
+    Args:
+        final_model (Any): Trained model
+        X_test (pd.DataFrame): Test features
+        y_test (pd.Series): Test labels
+        output_path (Path): Output directory
+        trait (str): Trait name
+        prefix (str): Output file prefix
+    Returns:
+        float: AUC score
     '''
     y_pred_prob = final_model.predict_proba(X_test)[:, 1]
 
@@ -216,11 +286,27 @@ def plot_ROC(final_model, X_test, y_test, output_path, trait, prefix):
     plt.savefig(output_path / f'{trait}_ROC_curve_{prefix}.png', bbox_inches='tight')
     return auc
 
-def plot_top_feature_importances(model, X, output_path, prefix, n_top=10, phecode_map=None):
+def plot_top_feature_importances(
+    model: Any,
+    X: pd.DataFrame,
+    output_path: Path,
+    prefix: str,
+    n_top: int = 10,
+    phecode_map: Optional[Union[Dict[str, str], pd.DataFrame]] = None
+) -> None:
     """
     Plot and save the top n feature importances for a fitted RandomForest model.
     Optionally, use phecode_map (dict or DataFrame) to map phecodes to string names for axis labels.
     The y-axis will show "phecode: description" (phecode left, description right).
+    Args:
+        model (Any): Trained model with feature_importances_
+        X (pd.DataFrame): Training features
+        output_path (Path): Output directory
+        prefix (str): Output file prefix
+        n_top (int): Number of top features to plot
+        phecode_map (Optional[Union[Dict[str, str], pd.DataFrame]]): Mapping from phecode to description
+    Returns:
+        None
     """
     if not hasattr(model, "feature_importances_"):
         logging.warning("Model does not have feature_importances_ attribute.")
@@ -266,14 +352,15 @@ def plot_top_feature_importances(model, X, output_path, prefix, n_top=10, phecod
     plt.close()
     logging.info(f'Saved top {n_top} feature importance plot to {out_fn}')
 
-def get_cases_and_controls(pair_file, n_controls_per_case=5):
+def get_cases_and_controls(
+    pair_file: Union[str, Path],
+    n_controls_per_case: int = 5
+) -> Tuple[List[Any], List[Any]]:
     """
     Reads a case-control pair file and returns lists of case and control IDs.
-    
     Args:
         pair_file (str or Path): Path to the case-control pairs file.
         n_controls_per_case (int): Number of controls to use per case (max is the number of control columns in the file).
-        
     Returns:
         cases (list): List of case IDs.
         controls (list): List of unique control IDs (across all cases, up to n_controls_per_case per case).
@@ -286,9 +373,9 @@ def get_cases_and_controls(pair_file, n_controls_per_case=5):
     controls = [c for c in controls if pd.notnull(c)]
     return cases, controls
 
-def main():
+def main() -> None:
     '''
-    Main function
+    Main function to orchestrate data preparation, model training, evaluation, and saving.
     '''
     args = process_args()
     trait = args.trait
