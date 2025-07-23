@@ -44,5 +44,21 @@ results/*
 !results/.gitkeep
 data/*
 !data/.gitkeep
-# Explicitly include the data_paths.yaml file
-!data/data_paths.yaml 
+!data/test_case.csv
+
+
+# Snakemake
+.snakemake/
+*.snakemake.log
+# Exclude Snakemake-generated temp and log files
+*.snakemake.timestamp
+# Exclude Snakemake-generated scripts
+.snakejob.*
+# Exclude Snakemake-generated DAG and report files
+dag.dot
+report.html
+# Exclude Snakemake shadow directories
+.shadow/
+/.shadow_*
+# Exclude Snakemake lock files
+.snakefile.lock

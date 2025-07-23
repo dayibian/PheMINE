@@ -14,8 +14,13 @@ warnings.filterwarnings('ignore')
 
 import yaml
 # Load config.yaml for default paths
-with open("config.yaml") as f:
-    config = yaml.safe_load(f)
+try:
+    with open("../config.yaml") as f:
+        config = yaml.safe_load(f)
+except FileNotFoundError:
+    # Try to open config.yaml in the current directory
+    with open("config.yaml") as f:
+        config = yaml.safe_load(f)
 
 
 def setup_log(fn_log, mode='w'):
@@ -100,25 +105,22 @@ def main():
     # results_sig.head()
 
     enriched_phecode = pd.DataFrame(columns=['Phecode', 'Description', 'Count', 'p.value',
-                                            'p01', 'p05', 'p10', 'p50', 'p90',
-                                            'p95', 'p99', 'max', 'case_to_control_ratio'])
+                                         'p01', 'p05', 'p10', 'p50', 'p90',
+                                         'p95', 'p99', 'max', 'case_to_control_ratio'])
 
     logging.info('Generating statistics for enrichment analysis...')
     for i in tqdm(range(len(results_sig))):
-        control_count = pd.to_numeric(results_sig.iloc[i, 3:-1]).to_list()
+        control_count = pd.to_numeric(results_sig.iloc[i, 3:-1], errors='coerce').to_list()
         row = results_sig.iloc[i]
         case_count = row['case_count']
         code, pval, desc = row['phecode'], row['pval'], row['PhecodeString']
         
         percentiles = [1, 5, 10, 50, 90, 95, 99]
         stats = [int(np.percentile(control_count, p)) for p in percentiles]
-        max_count = int(max(control_count))
-        enriched_phecode.loc[i] = [code, desc, int(case_count), pval] + stats + [max_count]
+        max_count = int(max(control_count)) if len(control_count) > 0 else 0
+        ratio = round(int(case_count) / max_count, 2) if max_count > 0 else 1000
 
-        if max_count > 0:
-            enriched_phecode.loc[i, 'case_to_control_ratio'] = round(int(case_count) / max_count, 2)
-        else:
-            enriched_phecode.loc[i, 'case_to_control_ratio'] = 1000
+        enriched_phecode.loc[i] = [code, desc, int(case_count), pval] + stats + [max_count, ratio]
 
     enriched_phecode = enriched_phecode[enriched_phecode.Description!='NA']
     enriched_phecode.sort_values(by='case_to_control_ratio', ascending=False, inplace=True)

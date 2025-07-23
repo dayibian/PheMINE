@@ -24,8 +24,13 @@ from pathlib import Path
 import yaml
 
 # Load config.yaml for default paths
-with open("../config.yaml") as f:
-    config = yaml.safe_load(f)
+try:
+    with open("../config.yaml") as f:
+        config = yaml.safe_load(f)
+except FileNotFoundError:
+    # Try to open config.yaml in the current directory
+    with open("config.yaml") as f:
+        config = yaml.safe_load(f)
 
 def setup_log(fn_log, mode='w'):
     '''
@@ -168,7 +173,7 @@ def get_frequencies(lst_ids, df_phecode):
     return count and frequencies of phecodes in a data series
     '''
     df_subset = df_phecode[df_phecode.loc[:, 'grid'].isin(lst_ids)]
-    return df_subset.iloc[:, :-1].sum(), df_subset.iloc[:, :-1].sum()/len(df_subset) # Return counts and frequency, Skip the last column (ID column)
+    return df_subset.iloc[:, 1:].sum(), df_subset.iloc[:, 1:].sum()/len(df_subset) # Return counts and frequency, Skip the last column (ID column)
 
 def main():
     args = process_args()
@@ -189,14 +194,14 @@ def main():
     df_case_count, _ = get_frequencies(lst_case, df_phecode)
 
     logging.info('\n# Calcualte frequency of each phecode in controls with permutation')
-    lst_control_count = [] # Store counts of controls
+    all_control_count = [] # Store counts of controls
     rng = np.random.default_rng(seed=2024)
     for i in range(args.n_permute):
         lst_control_count, _ = get_frequencies(get_lst_controls(lst_case, dict_control, rng), df_phecode)
-        lst_control_count.append(lst_control_count)
+        all_control_count.append(lst_control_count)
         if i%10==0: print(f'\r - Permutation {i+1}   ', end='', flush=True)
     print(f'\r - Permutation {i+1}   ', end='\n')
-    df_all_count = pd.concat([df_case_count]+lst_control_count, axis=1).reset_index()
+    df_all_count = pd.concat([df_case_count]+all_control_count, axis=1).reset_index()
     df_all_count.columns = ['phecode', 'case_count'] + [f'control_count_{x+1}' for x in range(args.n_permute)]
     
     logging.info('\n# Calcualte p values')

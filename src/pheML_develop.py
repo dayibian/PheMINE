@@ -27,9 +27,13 @@ import warnings
 warnings.filterwarnings('ignore')
 logging.getLogger('matplotlib.font_manager').disabled = True
 
-# Load data paths
-with open('../config.yaml', 'r') as f:
-    data_paths = yaml.safe_load(f)
+try:
+    with open("../config.yaml") as f:
+        config = yaml.safe_load(f)
+except FileNotFoundError:
+    # Try to open config.yaml in the current directory
+    with open("config.yaml") as f:
+        config = yaml.safe_load(f)
 
 full_name = {
     'als': 'ALS',
@@ -66,6 +70,7 @@ def process_args() -> argparse.Namespace:
                         default='/data100t1/home/biand/Projects/Comorbidity_analysis/output/')
     parser.add_argument('--trait', help='Trait of interest', type=str, default='als')
     parser.add_argument('--output_prefix', type=str, default='output')
+    parser.add_argument('--model_type', type=str, default='CART')
     
     args = parser.parse_args()
 
@@ -345,7 +350,7 @@ def plot_top_feature_importances(
         [feature_labels[i] for i in range(len(top_features)-1, -1, -1)]
     )
     plt.xlabel('Feature Importance')
-    plt.title(f'Top {n_top} Feature Importances (Random Forest)')
+    plt.title(f'Top {n_top} Feature Importances')
     plt.tight_layout()
     out_fn = output_path / f'{prefix}_rf_feature_importance_top{n_top}.png'
     plt.savefig(out_fn)
@@ -382,13 +387,14 @@ def main() -> None:
     data_path = Path(args.data_folder)
     output_path = Path(args.output_folder)
     prefix = args.output_prefix
+    model_type = args.model_type
 
     # Import case control and corresponding phecodes
     logging.info('Preparing data for model development...')
     # phecode_table = pd.read_csv(data_path / f'{trait}/phecode_table.txt', sep='\t')
-    case_grid, control_grid = get_cases_and_controls(output_path / 'case_control_pairs_icd_count_5.txt') # TODO: avoid hardcoding the file name
+    case_grid, control_grid = get_cases_and_controls(output_path / f'case_control_pairs_{prefix}.txt')
 
-    sd_phecode = pd.read_feather(data_paths['phecode_binary_feather_file'])
+    sd_phecode = pd.read_feather(config['phecode_binary_feather_file'])
 
     # case_grid = list(set(cases.GRID))
     # control_grid = list(controls_clean.sample(n=len(case_grid)*30, random_state=2024).GRID)
@@ -410,11 +416,20 @@ def main() -> None:
                                                         random_state=2024, stratify=data.label)
 
     logging.info('Training the model...')
-    final_model = train_model(X_train, y_train, model_type='RF')
+    final_model = train_model(X_train, y_train, model_type=model_type)
+
+    logging.info('Reading phecode map...')
+    phecode_map = pd.read_csv(config['phecode_map_file'], dtype={'Phecode':str})
+    phecode_map = phecode_map[['Phecode', 'PhecodeString']].drop_duplicates(ignore_index=True)
+    phecode_map.Phecode = phecode_map.Phecode.apply(lambda x: x.strip())
+    phecode_map.index = phecode_map.Phecode
+    phecode_map.drop(columns=['Phecode'], inplace=True)
+    phecode_map = phecode_map.to_dict()
+    phecode_map = phecode_map['PhecodeString']
 
     logging.info('Plotting model results...')
     # Call the feature importance plotting function
-    plot_top_feature_importances(final_model, X_train, output_path, prefix, n_top=10)
+    plot_top_feature_importances(final_model, X_train, output_path, prefix, n_top=10, phecode_map=phecode_map)
     precision = plot_CM(final_model, X_test, y_test, output_path, trait, prefix)
     auc = plot_ROC(final_model, X_test, y_test, output_path, trait, prefix)
     logging.info(f'Precision is: {precision:.2f}')

@@ -21,8 +21,13 @@ from tqdm import tqdm
 import yaml
 
 # Load config.yaml for default paths
-with open("../config.yaml") as f:
-    config = yaml.safe_load(f)
+try:
+    with open("../config.yaml") as f:
+        config = yaml.safe_load(f)
+except FileNotFoundError:
+    # Try to open config.yaml in the current directory
+    with open("config.yaml") as f:
+        config = yaml.safe_load(f)
 
 # Set random seed for reproducibility
 random.seed(2025)

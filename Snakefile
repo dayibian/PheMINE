@@ -20,10 +20,11 @@ RESULTS_DIR = config.get("results_dir", "results")
 DATA_DIR = config.get("data_dir", "data")
 OUTPUT_PREFIX = config.get("output_prefix", "output")
 N_PERMUTE = config.get("n_permute", 10000)
+MODEL_TYPE = config.get("model_type", 'RF')
 
 rule all:
     input:
-        f"{RESULTS_DIR}/case_control_pairs.txt",
+        f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt",
         f"{RESULTS_DIR}/{OUTPUT_PREFIX}.counts_and_pval.txt",
         f"{RESULTS_DIR}/{TRAIT}_{OUTPUT_PREFIX}_enriched_phecode.csv",
         f"{RESULTS_DIR}/PheML_{OUTPUT_PREFIX}.model"
@@ -36,11 +37,11 @@ rule find_matched_controls:
         demographics=SD_DEMO_PATH,
         depth=DEPTH_OF_RECORD_PATH
     output:
-        f"{RESULTS_DIR}/case_control_pairs.txt"
+        f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt"
     params:
         icd_count=ICD_COUNT,
         result_path=RESULTS_DIR,
-        result_filename="case_control_pairs"
+        result_filename=f"case_control_pairs_{OUTPUT_PREFIX}"
     conda:
         "environment.yaml"
     shell:
@@ -53,13 +54,13 @@ rule find_matched_controls:
 
 rule phecode_enrichment_with_permutation:
     input:
-        case_control_pairs=f"{RESULTS_DIR}/case_control_pairs.txt"
+        case_control_pairs=f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt"
     output:
         f"{RESULTS_DIR}/{OUTPUT_PREFIX}.counts_and_pval.txt"
     params:
         output_path=RESULTS_DIR,
         output_prefix=OUTPUT_PREFIX,
-        control_fn=f"{RESULTS_DIR}/case_control_pairs.txt",
+        control_fn=f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt",
         n_permute=N_PERMUTE
     conda:
         "environment.yaml"
@@ -102,7 +103,8 @@ rule pheML_develop:
         data_folder=DATA_DIR,
         output_folder=RESULTS_DIR,
         trait=TRAIT,
-        output_prefix=OUTPUT_PREFIX
+        output_prefix=OUTPUT_PREFIX,
+        model_type=MODEL_TYPE
     conda:
         "environment.yaml"
     shell:
@@ -111,5 +113,6 @@ rule pheML_develop:
             --data_folder {params.data_folder} \
             --output_folder {params.output_folder} \
             --trait {params.trait} \
-            --output_prefix {params.output_prefix}
+            --output_prefix {params.output_prefix} \
+            --model_type {params.model_type}
         """

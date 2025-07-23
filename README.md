@@ -1,4 +1,4 @@
-# PheWES (Phenome-wide enrichment analysis)
+# PheWES & PheML
 
 ## Project Structure
 ```
