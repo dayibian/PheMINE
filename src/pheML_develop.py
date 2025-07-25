@@ -7,6 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.metrics import precision_score, ConfusionMatrixDisplay, roc_curve, roc_auc_score
 from sklearn.neural_network import MLPClassifier
+import shap
 try:
     from xgboost import XGBClassifier
 except ImportError:
@@ -71,6 +72,7 @@ def process_args() -> argparse.Namespace:
     parser.add_argument('--trait', help='Trait of interest', type=str, default='als')
     parser.add_argument('--output_prefix', type=str, default='output')
     parser.add_argument('--model_type', type=str, default='CART')
+    parser.add_argument('--matched_controls_for_ML', type=int, default=1)
     
     args = parser.parse_args()
 
@@ -95,7 +97,9 @@ def process_args() -> argparse.Namespace:
 def get_phecode_features(
     data_path: Path,
     output_path: Path,
-    trait: str
+    trait: str,
+    prefix: str,
+    number_of_cases: int
 ) -> List[str]:
     '''
     Get enriched phecodes, drop those used for phenotyping.
@@ -117,7 +121,7 @@ def get_phecode_features(
 
 
     phecodes = {
-        'hpp': ['275.53']
+        'hpp': []
     }
 
     if trait in phecodes:
@@ -129,13 +133,14 @@ def get_phecode_features(
         excluded_code = case_codes_.phecode.unique()
     
     # Get enriched phecode
-    enrich_results = pd.read_csv(output_path / 'hpp_icd_count_5_enriched_phecode_updated.csv', sep='\t', dtype={'Phecode':str}) # TODO: avoid hardcoding the file name
-    phecode_features = list(enrich_results.Phecode)
+    enrich_results = pd.read_csv(output_path / f'{trait}_{prefix}_enriched_phecode.csv', sep='\t', dtype={'Phecode':str})
+    enrich_results = enrich_results[enrich_results.Count > number_of_cases * .01] # Remove those phecodes that has counts less than 1% of case number, regardless of significance
+    phecode_features = enrich_results.Phecode.astype(str).unique().tolist()
     
-    phecode_features_ = phecode_features[:]
-    for code in excluded_code:
-        phecode_features_.remove(code)
+    excluded_set = set(excluded_code)
+    phecode_features_ = [code for code in phecode_features if code not in excluded_set] if excluded_set else phecode_features
     return phecode_features_
+
 
 def train_model(
     X_train: pd.DataFrame,
@@ -359,24 +364,102 @@ def plot_top_feature_importances(
 
 def get_cases_and_controls(
     pair_file: Union[str, Path],
-    n_controls_per_case: int = 5
+    potential_controls: list,
+    n_controls_per_case: int = 5,
+    use_matched_controls: bool = True
 ) -> Tuple[List[Any], List[Any]]:
     """
     Reads a case-control pair file and returns lists of case and control IDs.
     Args:
         pair_file (str or Path): Path to the case-control pairs file.
-        n_controls_per_case (int): Number of controls to use per case (max is the number of control columns in the file).
+        potential_controls (list): List of unmatched control IDs. Required if use_matched_controls is False.
+        n_controls_per_case (int): Number of controls to use per case (max is the number of control columns in the file or number to sample from potential_controls).
+        use_matched_controls (bool): Whether to use the controls from the matched control set. If False, use potential_controls.
     Returns:
         cases (list): List of case IDs.
-        controls (list): List of unique control IDs (across all cases, up to n_controls_per_case per case).
+        controls (list): List of unique control IDs (from matched controls or randomly sampled from potential_controls).
     """
+    import random
+
     df = pd.read_csv(pair_file, sep='\t')
     cases = df['case'].dropna().tolist()
-    # Get only the first n_controls_per_case control columns
-    control_cols = [col for col in df.columns if col.startswith('Control')][:n_controls_per_case] # TODO: might not be smart to use those matched controls for training
-    controls = pd.unique(df[control_cols].values.ravel('K'))
-    controls = [c for c in controls if pd.notnull(c)]
+    if use_matched_controls:
+        # Get only the first n_controls_per_case control columns
+        control_cols = [col for col in df.columns if col.startswith('Control')][:n_controls_per_case]
+        controls = pd.unique(df[control_cols].values.ravel('K'))
+        controls = [c for c in controls if pd.notnull(c)]
+    else:
+        if potential_controls is None or not isinstance(potential_controls, list) or len(potential_controls) == 0:
+            raise ValueError("unmatched_controls must be provided as a non-empty list when use_matched_controls is False.")
+        # Sample n_controls_per_case * number of cases, or the max available if not enough
+        unmatched_controls = list(set(potential_controls) - set(cases))
+        n_controls_total = min(n_controls_per_case * len(cases), len(unmatched_controls))
+        controls = random.sample(unmatched_controls, n_controls_total)
     return cases, controls
+
+def interpret_model(
+    model: object, 
+    data: pd.DataFrame, 
+    grid: str, 
+    phecode_map: dict, 
+    output_path: Path, 
+    prefix: str, 
+    plot: str = 'waterfall', 
+    show: bool = False
+) -> None:
+    """
+    Interpret a trained model for a specific patient (grid) using SHAP values.
+    Generates and saves a SHAP plot (waterfall or heatmap) for the given patient.
+
+    Args:
+        model: Trained ML model (must be compatible with SHAP).
+        data: DataFrame containing patient data (including 'grid' column).
+        grid: Patient grid ID to interpret.
+        phecode_map: Dictionary mapping phecode to description.
+        output_path: Path to save the plot.
+        prefix: Prefix for output filename.
+        plot: Type of SHAP plot ('waterfall' or 'heatmap').
+        show: If True, display the plot; if False, save to file.
+    """
+
+    # Helper: Find the row index for the given grid ID
+    def find_index_of_grid(data, grid):
+        matches = data.index[data['grid'] == grid]
+        return matches[0] if not matches.empty else None
+
+    # Extract feature columns (assumes first col is 'grid', last is 'label')
+    X_phecode = data.iloc[:, 1:-1].copy()
+
+    # Add descriptions to feature columns using phecode_map (if available)
+    X_phecode.columns = [
+        f"{col} ({phecode_map[col]})" if col in phecode_map else col
+        for col in X_phecode.columns
+    ]
+
+    # Use SHAP to explain the model's predictions
+    explainer = shap.Explainer(model)
+    shap_values = explainer(X_phecode)
+
+    idx = find_index_of_grid(data, grid)
+    if idx is None:
+        raise ValueError(f"Grid ID {grid} not found in data.")
+
+    # Generate the requested SHAP plot
+    if plot == 'waterfall':
+        # For binary classification, use the SHAP values for class 1
+        shap.plots.waterfall(shap_values[idx, :, 1], show=show)
+    elif plot == 'heatmap':
+        shap.plots.heatmap(shap_values[:, :, 1], show=show)
+    else:
+        raise ValueError(f"Unsupported plot type: {plot}")
+
+    # Save the plot if not displaying interactively
+    if not show:
+        plt.title(f'{plot.capitalize()} plot for {grid}')
+        out_file = output_path / f'{plot}_for_{grid}_{prefix}.png'
+        plt.savefig(out_file, bbox_inches='tight')
+        plt.close()
+        logging.info(f"Saved {plot} plot for {grid} to {out_file}")
 
 def main() -> None:
     '''
@@ -388,13 +471,18 @@ def main() -> None:
     output_path = Path(args.output_folder)
     prefix = args.output_prefix
     model_type = args.model_type
+    use_matched_controls = args.matched_controls_for_ML
 
     # Import case control and corresponding phecodes
     logging.info('Preparing data for model development...')
-    # phecode_table = pd.read_csv(data_path / f'{trait}/phecode_table.txt', sep='\t')
-    case_grid, control_grid = get_cases_and_controls(output_path / f'case_control_pairs_{prefix}.txt')
 
     sd_phecode = pd.read_feather(config['phecode_binary_feather_file'])
+    all_sd_grids = sd_phecode.grid.to_list()
+    case_grid, control_grid = get_cases_and_controls(output_path / f'case_control_pairs_{prefix}.txt', 
+                                                     potential_controls=all_sd_grids, 
+                                                     use_matched_controls=use_matched_controls
+                                                     )
+    number_of_cases = len(case_grid)
 
     # case_grid = list(set(cases.GRID))
     # control_grid = list(controls_clean.sample(n=len(case_grid)*30, random_state=2024).GRID)
@@ -410,7 +498,8 @@ def main() -> None:
     # data[feature_cols] = data[feature_cols].astype(str)
     # print(data.head())
 
-    phecode_features_ = get_phecode_features(data_path, output_path, trait)
+    phecode_features_ = get_phecode_features(data_path, output_path, trait, prefix, number_of_cases)
+    data[['grid']+phecode_features_+['label']].to_csv(data_path / f'{prefix}_data_for_ML.csv', index=False)
     # print(phecode_features_)
     X_train, X_test, y_train, y_test = train_test_split(data[phecode_features_], data.label, train_size=0.8,
                                                         random_state=2024, stratify=data.label)
@@ -436,7 +525,7 @@ def main() -> None:
     logging.info(f'AUC is: {auc:.2f}')
 
     logging.info('Saving model...')
-    joblib.dump(final_model, output_path / f'PheML_{prefix}.model')
+    joblib.dump(final_model, output_path / f'PheML_{model_type}_{prefix}.model')
     logging.info('Done. Model building completed.')
 
 if __name__ == '__main__':

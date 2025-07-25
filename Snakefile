@@ -21,13 +21,14 @@ DATA_DIR = config.get("data_dir", "data")
 OUTPUT_PREFIX = config.get("output_prefix", "output")
 N_PERMUTE = config.get("n_permute", 10000)
 MODEL_TYPE = config.get("model_type", 'RF')
+USE_MATCHED_CONTROLS = config.get("use_matched_controls", 0)
 
 rule all:
     input:
         f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt",
         f"{RESULTS_DIR}/{OUTPUT_PREFIX}.counts_and_pval.txt",
         f"{RESULTS_DIR}/{TRAIT}_{OUTPUT_PREFIX}_enriched_phecode.csv",
-        f"{RESULTS_DIR}/PheML_{OUTPUT_PREFIX}.model"
+        f"{RESULTS_DIR}/PheML_{MODEL_TYPE}_{OUTPUT_PREFIX}.model"
     conda:
         "environment.yaml"
 
@@ -98,13 +99,14 @@ rule pheML_develop:
     input:
         enriched_phecode=f"{RESULTS_DIR}/{TRAIT}_{OUTPUT_PREFIX}_enriched_phecode.csv"
     output:
-        f"{RESULTS_DIR}/PheML_{OUTPUT_PREFIX}.model"
+        f"{RESULTS_DIR}/PheML_{MODEL_TYPE}_{OUTPUT_PREFIX}.model"
     params:
         data_folder=DATA_DIR,
         output_folder=RESULTS_DIR,
         trait=TRAIT,
         output_prefix=OUTPUT_PREFIX,
-        model_type=MODEL_TYPE
+        model_type=MODEL_TYPE,
+        use_matched_controls=USE_MATCHED_CONTROLS
     conda:
         "environment.yaml"
     shell:
@@ -114,5 +116,6 @@ rule pheML_develop:
             --output_folder {params.output_folder} \
             --trait {params.trait} \
             --output_prefix {params.output_prefix} \
-            --model_type {params.model_type}
+            --model_type {params.model_type} \
+            --matched_controls_for_ML {params.use_matched_controls}
         """

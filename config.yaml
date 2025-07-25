@@ -8,6 +8,7 @@ data_dir: data
 output_prefix: test
 n_permute: 1000 # change to 10000 for real work
 model_type: RF
+use_matched_controls: 1
 
 # Data file paths (merged from data_paths.yaml)
 phecode_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/all-sd-codes.csv.gz

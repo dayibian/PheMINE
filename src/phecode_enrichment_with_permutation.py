@@ -173,7 +173,7 @@ def get_frequencies(lst_ids, df_phecode):
     return count and frequencies of phecodes in a data series
     '''
     df_subset = df_phecode[df_phecode.loc[:, 'grid'].isin(lst_ids)]
-    return df_subset.iloc[:, 1:].sum(), df_subset.iloc[:, 1:].sum()/len(df_subset) # Return counts and frequency, Skip the last column (ID column)
+    return df_subset.iloc[:, 1:].sum(), df_subset.iloc[:, 1:].sum()/len(df_subset) # Return counts and frequency, Skip the first column (ID column)
 
 def main():
     args = process_args()
