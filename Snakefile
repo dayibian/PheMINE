@@ -10,6 +10,7 @@ configfile: "config.yaml"
 import os
 
 CASE_PATH = config["case_path"]
+CONTROL_EXCLUSION_LIST = config["control_exclusion_list"]
 SD_DEMO_PATH = config["sd_demographics_file"]
 DEPTH_OF_RECORD_PATH = config["depth_of_record_path"]
 
@@ -22,6 +23,7 @@ OUTPUT_PREFIX = config.get("output_prefix", "output")
 N_PERMUTE = config.get("n_permute", 10000)
 MODEL_TYPE = config.get("model_type", 'RF')
 USE_MATCHED_CONTROLS = config.get("use_matched_controls", 0)
+N_CONTROLS_PER_CASE = config.get("n_controls_per_case", 5)
 
 rule all:
     input:
@@ -42,7 +44,8 @@ rule find_matched_controls:
     params:
         icd_count=ICD_COUNT,
         result_path=RESULTS_DIR,
-        result_filename=f"case_control_pairs_{OUTPUT_PREFIX}"
+        result_filename=f"case_control_pairs_{OUTPUT_PREFIX}",
+        control_exclusion_list=CONTROL_EXCLUSION_LIST
     conda:
         "environment.yaml"
     shell:
@@ -50,7 +53,8 @@ rule find_matched_controls:
         python src/find_matched_controls.py \
             --icd_count {params.icd_count} \
             --result_path {params.result_path} \
-            --result_filename {params.result_filename}
+            --result_filename {params.result_filename} \
+            --control_exclusion_list {params.control_exclusion_list}
         """
 
 rule phecode_enrichment_with_permutation:
@@ -106,7 +110,8 @@ rule pheML_develop:
         trait=TRAIT,
         output_prefix=OUTPUT_PREFIX,
         model_type=MODEL_TYPE,
-        use_matched_controls=USE_MATCHED_CONTROLS
+        use_matched_controls=USE_MATCHED_CONTROLS,
+        n_controls_per_case=N_CONTROLS_PER_CASE
     conda:
         "environment.yaml"
     shell:
@@ -117,5 +122,6 @@ rule pheML_develop:
             --trait {params.trait} \
             --output_prefix {params.output_prefix} \
             --model_type {params.model_type} \
-            --matched_controls_for_ML {params.use_matched_controls}
+            --matched_controls_for_ML {params.use_matched_controls} \
+            --n_controls_per_case {params.n_controls_per_case}
         """

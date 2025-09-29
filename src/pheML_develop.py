@@ -4,10 +4,15 @@ from scipy.stats import randint
 
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.metrics import precision_score, ConfusionMatrixDisplay, roc_curve, roc_auc_score
+from sklearn.model_selection import train_test_split, RandomizedSearchCV, StratifiedKFold
+
 from sklearn.neural_network import MLPClassifier
-import shap
+from imblearn.over_sampling import SMOTEN
+from imblearn.pipeline import Pipeline
+
+from plotting import plot_feature_importances, compute_permutation_importance, plot_permutation_importance, plot_CM, plot_ROC
+
+
 try:
     from xgboost import XGBClassifier
 except ImportError:
@@ -36,12 +41,13 @@ except FileNotFoundError:
     with open("config.yaml") as f:
         config = yaml.safe_load(f)
 
-full_name = {
+FULL_NAME = {
     'als': 'ALS',
     'ftld': 'FTLD',
     'vasc_dementia': 'Vascular Dementia',
     'lewy_body': 'Lewy Body Dementia',
-    'hpp': 'Hypophosphatasia'
+    'hpp': 'Hypophosphatasia',
+    'celiac': 'Celiac Disease'
 }
 
 def setup_log(fn_log: Union[str, Path], mode: str = 'w') -> None:
@@ -73,6 +79,10 @@ def process_args() -> argparse.Namespace:
     parser.add_argument('--output_prefix', type=str, default='output')
     parser.add_argument('--model_type', type=str, default='CART')
     parser.add_argument('--matched_controls_for_ML', type=int, default=1)
+    parser.add_argument('--n_controls_per_case', type=int, default=5, 
+                        help='Number of controls to use per case')
+    parser.add_argument('--use_smoten', type=int, default=1,
+                        help='Whether to use SMOTEN for class balancing')
     
     args = parser.parse_args()
 
@@ -116,12 +126,14 @@ def get_phecode_features(
         'ftld': ['G31.01', 'G31.09', 'G21.1', 'G31.85', '331.11', '331.19', '331.6'],
         'vasc_dementia': ['F01.50', 'F01.51', 'F01.511', 'F01.518', '290.40', '290.41'],
         'lewy_body': ['G31.83', 'G20', 'F02.80', '331.82', '332.0', '294.10'],
-        'hpp': ['275.3', 'E83.39']
+        'hpp': ['275.3', 'E83.39'],
+        'celiac': ['579.0', 'K90.0']
     }
 
 
     phecodes = {
-        'hpp': []
+        'hpp': [],
+        'celiac': ['557.1']
     }
 
     if trait in phecodes:
@@ -146,6 +158,7 @@ def train_model(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     model_type: str = 'RF',
+    use_smoten: bool = False,
     random_state: int = 42,
     verbose: int = 2,
     n_jobs: int = -1
@@ -156,6 +169,7 @@ def train_model(
         X_train (pd.DataFrame): Training features
         y_train (pd.Series): Training labels
         model_type (str): 'CART', 'RF', 'XG', or 'NN'/'MLP'
+        use_smoten (bool): Whether to use SMOTEN for class balancing
         random_state (int): Random seed
         verbose (int): Verbosity level
         n_jobs (int): Number of parallel jobs
@@ -207,160 +221,31 @@ def train_model(
     else:
         raise ValueError(f"Unknown model_type: {model_type}. Choose from 'CART', 'RF', 'XG', or 'NN'/'MLP'.")
 
+    if use_smoten:
+        pipeline = Pipeline([
+            ('smote', SMOTEN(random_state=random_state)),
+            ('model', base_model)
+        ])
+        param_dist = {'model__' + k: v for k, v in param_dist.items()}
+    else:
+        pipeline = base_model
+    
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     random_search = RandomizedSearchCV(
-        estimator=base_model,
+        estimator=pipeline,
         param_distributions=param_dist,
         n_iter=n_iter,
-        cv=5,
+        cv=cv,
         scoring='accuracy',
         verbose=verbose,
         random_state=random_state,
         n_jobs=n_jobs
     )
+
     random_search.fit(X_train, y_train)
     best_model = random_search.best_estimator_
     best_model.fit(X_train, y_train)
     return best_model
-
-
-def plot_CM(
-    model: Any,
-    X: pd.DataFrame,
-    y: pd.Series,
-    output_path: Path,
-    trait: str,
-    prefix: str
-) -> float:
-    '''
-    Plot confusion matrix for testing data.
-    Args:
-        model (Any): Trained model
-        X (pd.DataFrame): Features
-        y (pd.Series): Labels
-        output_path (Path): Output directory
-        trait (str): Trait name
-        prefix (str): Output file prefix
-    Returns:
-        float: Precision score
-    '''
-    class_names = ['Control', full_name[trait]]
-    disp = ConfusionMatrixDisplay.from_estimator(
-            model,
-            X,
-            y,
-            display_labels=class_names,
-            cmap=plt.cm.Blues,
-        )
-    p = precision_score(y, model.predict(X))
-    disp.ax_.set_title(f'Confusion Matrix of {full_name[trait]} Prediction Model (Precision: {p:.2f}')
-    plt.savefig(output_path / f'{trait}_CM_{prefix}.png', bbox_inches='tight')
-    return p
-
-def plot_ROC(
-    final_model: Any,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
-    output_path: Path,
-    trait: str,
-    prefix: str
-) -> float:
-    '''
-    Plot ROC curve for testing data.
-    Args:
-        final_model (Any): Trained model
-        X_test (pd.DataFrame): Test features
-        y_test (pd.Series): Test labels
-        output_path (Path): Output directory
-        trait (str): Trait name
-        prefix (str): Output file prefix
-    Returns:
-        float: AUC score
-    '''
-    y_pred_prob = final_model.predict_proba(X_test)[:, 1]
-
-    # Calculate the ROC curve
-    fpr, tpr, thresholds = roc_curve(y_test, y_pred_prob)
-
-    # Calculate the AUC (Area Under the Curve)
-    auc = roc_auc_score(y_test, y_pred_prob)
-
-    # Plot the ROC curve
-    plt.figure()
-    plt.plot(fpr, tpr, label=f'Decision Tree (AUC = {auc:.2f})')
-    plt.plot([0, 1], [0, 1], 'k--')  # Dashed diagonal line (random classifier)
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title(f'ROC Curve for {full_name[trait]} prediction model')
-    plt.legend(loc='lower right')
-    plt.show()
-    plt.savefig(output_path / f'{trait}_ROC_curve_{prefix}.png', bbox_inches='tight')
-    return auc
-
-def plot_top_feature_importances(
-    model: Any,
-    X: pd.DataFrame,
-    output_path: Path,
-    prefix: str,
-    n_top: int = 10,
-    phecode_map: Optional[Union[Dict[str, str], pd.DataFrame]] = None
-) -> None:
-    """
-    Plot and save the top n feature importances for a fitted RandomForest model.
-    Optionally, use phecode_map (dict or DataFrame) to map phecodes to string names for axis labels.
-    The y-axis will show "phecode: description" (phecode left, description right).
-    Args:
-        model (Any): Trained model with feature_importances_
-        X (pd.DataFrame): Training features
-        output_path (Path): Output directory
-        prefix (str): Output file prefix
-        n_top (int): Number of top features to plot
-        phecode_map (Optional[Union[Dict[str, str], pd.DataFrame]]): Mapping from phecode to description
-    Returns:
-        None
-    """
-    if not hasattr(model, "feature_importances_"):
-        logging.warning("Model does not have feature_importances_ attribute.")
-        return
-    importances = model.feature_importances_
-    feature_names = X.columns
-    # Get indices of top n features
-    top_idx = importances.argsort()[::-1][:n_top]
-    top_features = [feature_names[i] for i in top_idx]
-    top_importances = importances[top_idx]
-
-    # Map phecodes to string names if mapping is provided
-    if phecode_map is not None:
-        # If dict, use directly; if DataFrame, build dict from columns
-        if isinstance(phecode_map, dict):
-            feature_descs = [phecode_map.get(str(f), "") for f in top_features]
-        elif hasattr(phecode_map, "set_index"):
-            # Assume DataFrame with columns 'Phecode' and 'Description'
-            map_dict = dict(zip(phecode_map['Phecode'].astype(str), phecode_map['Description']))
-            feature_descs = [map_dict.get(str(f), "") for f in top_features]
-        else:
-            feature_descs = ["" for f in top_features]
-    else:
-        feature_descs = ["" for f in top_features]
-
-    # Build ytick labels as "phecode: description"
-    feature_labels = [
-        f"{str(phecode)}: {desc}" if desc else str(phecode)
-        for phecode, desc in zip(top_features, feature_descs)
-    ]
-
-    plt.figure(figsize=(10, 7))
-    plt.barh(range(len(top_features)), top_importances[::-1], align='center')
-    plt.yticks(
-        range(len(top_features)),
-        [feature_labels[i] for i in range(len(top_features)-1, -1, -1)]
-    )
-    plt.xlabel('Feature Importance')
-    plt.title(f'Top {n_top} Feature Importances')
-    plt.tight_layout()
-    out_fn = output_path / f'{prefix}_rf_feature_importance_top{n_top}.png'
-    plt.savefig(out_fn)
-    plt.close()
-    logging.info(f'Saved top {n_top} feature importance plot to {out_fn}')
 
 def get_cases_and_controls(
     pair_file: Union[str, Path],
@@ -397,70 +282,6 @@ def get_cases_and_controls(
         controls = random.sample(unmatched_controls, n_controls_total)
     return cases, controls
 
-def interpret_model(
-    model: object, 
-    data: pd.DataFrame, 
-    grid: str, 
-    phecode_map: dict, 
-    output_path: Path, 
-    prefix: str, 
-    plot: str = 'waterfall', 
-    show: bool = False
-) -> None:
-    """
-    Interpret a trained model for a specific patient (grid) using SHAP values.
-    Generates and saves a SHAP plot (waterfall or heatmap) for the given patient.
-
-    Args:
-        model: Trained ML model (must be compatible with SHAP).
-        data: DataFrame containing patient data (including 'grid' column).
-        grid: Patient grid ID to interpret.
-        phecode_map: Dictionary mapping phecode to description.
-        output_path: Path to save the plot.
-        prefix: Prefix for output filename.
-        plot: Type of SHAP plot ('waterfall' or 'heatmap').
-        show: If True, display the plot; if False, save to file.
-    """
-
-    # Helper: Find the row index for the given grid ID
-    def find_index_of_grid(data, grid):
-        matches = data.index[data['grid'] == grid]
-        return matches[0] if not matches.empty else None
-
-    # Extract feature columns (assumes first col is 'grid', last is 'label')
-    X_phecode = data.iloc[:, 1:-1].copy()
-
-    # Add descriptions to feature columns using phecode_map (if available)
-    X_phecode.columns = [
-        f"{col} ({phecode_map[col]})" if col in phecode_map else col
-        for col in X_phecode.columns
-    ]
-
-    # Use SHAP to explain the model's predictions
-    explainer = shap.Explainer(model)
-    shap_values = explainer(X_phecode)
-
-    idx = find_index_of_grid(data, grid)
-    if idx is None:
-        raise ValueError(f"Grid ID {grid} not found in data.")
-
-    # Generate the requested SHAP plot
-    if plot == 'waterfall':
-        # For binary classification, use the SHAP values for class 1
-        shap.plots.waterfall(shap_values[idx, :, 1], show=show)
-    elif plot == 'heatmap':
-        shap.plots.heatmap(shap_values[:, :, 1], show=show)
-    else:
-        raise ValueError(f"Unsupported plot type: {plot}")
-
-    # Save the plot if not displaying interactively
-    if not show:
-        plt.title(f'{plot.capitalize()} plot for {grid}')
-        out_file = output_path / f'{plot}_for_{grid}_{prefix}.png'
-        plt.savefig(out_file, bbox_inches='tight')
-        plt.close()
-        logging.info(f"Saved {plot} plot for {grid} to {out_file}")
-
 def main() -> None:
     '''
     Main function to orchestrate data preparation, model training, evaluation, and saving.
@@ -480,6 +301,7 @@ def main() -> None:
     all_sd_grids = sd_phecode.grid.to_list()
     case_grid, control_grid = get_cases_and_controls(output_path / f'case_control_pairs_{prefix}.txt', 
                                                      potential_controls=all_sd_grids, 
+                                                     n_controls_per_case=args.n_controls_per_case,
                                                      use_matched_controls=use_matched_controls
                                                      )
     number_of_cases = len(case_grid)
@@ -499,13 +321,13 @@ def main() -> None:
     # print(data.head())
 
     phecode_features_ = get_phecode_features(data_path, output_path, trait, prefix, number_of_cases)
-    data[['grid']+phecode_features_+['label']].to_csv(data_path / f'{prefix}_data_for_ML.csv', index=False)
+    data[['grid']+phecode_features_+['label']].to_csv(output_path / f'{prefix}_data_for_ML.csv', index=False)
     # print(phecode_features_)
     X_train, X_test, y_train, y_test = train_test_split(data[phecode_features_], data.label, train_size=0.8,
                                                         random_state=2024, stratify=data.label)
 
     logging.info('Training the model...')
-    final_model = train_model(X_train, y_train, model_type=model_type)
+    final_model = train_model(X_train, y_train, model_type=model_type, use_smoten=args.use_smoten)
 
     logging.info('Reading phecode map...')
     phecode_map = pd.read_csv(config['phecode_map_file'], dtype={'Phecode':str})
@@ -517,10 +339,20 @@ def main() -> None:
     phecode_map = phecode_map['PhecodeString']
 
     logging.info('Plotting model results...')
-    # Call the feature importance plotting function
-    plot_top_feature_importances(final_model, X_train, output_path, prefix, n_top=10, phecode_map=phecode_map)
+    # Call the feature importance plotting function (for models that support it)
+    if hasattr(final_model, "feature_importances_"):
+        plot_feature_importances(final_model, X_train, output_path, prefix, n_top=10, phecode_map=phecode_map)
+    
+    # Compute and plot permutation importance for all model types
+    perm_results = compute_permutation_importance(
+        final_model, X_test, y_test, output_path, prefix, model_type, 
+        n_repeats=10, random_state=42, n_jobs=-1
+    )
+    plot_permutation_importance(perm_results, output_path, prefix, model_type, 
+                               n_top=15, phecode_map=phecode_map)
+    
     precision = plot_CM(final_model, X_test, y_test, output_path, trait, prefix)
-    auc = plot_ROC(final_model, X_test, y_test, output_path, trait, prefix)
+    auc = plot_ROC(final_model, X_test, y_test, output_path, trait, model_type, prefix)
     logging.info(f'Precision is: {precision:.2f}')
     logging.info(f'AUC is: {auc:.2f}')
 
@@ -530,4 +362,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-    #TODO: Add explainability to the model
