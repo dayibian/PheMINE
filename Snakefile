@@ -24,6 +24,7 @@ N_PERMUTE = config.get("n_permute", 10000)
 MODEL_TYPE = config.get("model_type", 'RF')
 USE_MATCHED_CONTROLS = config.get("use_matched_controls", 0)
 N_CONTROLS_PER_CASE = config.get("n_controls_per_case", 5)
+USE_SMOTEN = config.get("use_smoten", 0)
 
 rule all:
     input:
@@ -111,7 +112,8 @@ rule pheML_develop:
         output_prefix=OUTPUT_PREFIX,
         model_type=MODEL_TYPE,
         use_matched_controls=USE_MATCHED_CONTROLS,
-        n_controls_per_case=N_CONTROLS_PER_CASE
+        n_controls_per_case=N_CONTROLS_PER_CASE,
+        use_smoten=USE_SMOTEN
     conda:
         "environment.yaml"
     shell:
@@ -123,5 +125,6 @@ rule pheML_develop:
             --output_prefix {params.output_prefix} \
             --model_type {params.model_type} \
             --matched_controls_for_ML {params.use_matched_controls} \
-            --n_controls_per_case {params.n_controls_per_case}
+            --n_controls_per_case {params.n_controls_per_case} \
+            --use_smoten {params.use_smoten}
         """

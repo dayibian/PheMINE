@@ -8,14 +8,6 @@ from pathlib import Path
 from typing import Any, Optional, Union, Dict
 import logging
 
-FULL_NAME = {
-    'als': 'ALS',
-    'ftld': 'FTLD',
-    'vasc_dementia': 'Vascular Dementia',
-    'lewy_body': 'Lewy Body Dementia',
-    'hpp': 'Hypophosphatasia',
-    'celiac': 'Celiac Disease'
-}
 
 def plot_CM(
     model: Any,
@@ -37,7 +29,7 @@ def plot_CM(
     Returns:
         float: Precision score
     '''
-    class_names = ['Control', FULL_NAME[trait]]
+    class_names = ['Control', trait]
     disp = ConfusionMatrixDisplay.from_estimator(
             model,
             X,
@@ -46,7 +38,7 @@ def plot_CM(
             cmap=plt.cm.Blues,
         )
     p = precision_score(y, model.predict(X))
-    disp.ax_.set_title(f'Confusion Matrix of {FULL_NAME[trait]} Prediction Model (Precision: {p:.2f}')
+    disp.ax_.set_title(f'Confusion Matrix of {trait} Prediction Model (Precision: {p:.2f}')
     plt.savefig(output_path / f'{trait}_CM_{prefix}.png', bbox_inches='tight')
     return p
 
@@ -86,7 +78,7 @@ def plot_ROC(
     plt.plot([0, 1], [0, 1], 'k--')  # Dashed diagonal line (random classifier)
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title(f'ROC Curve for {FULL_NAME[trait]} prediction model')
+    plt.title(f'ROC Curve for {trait} prediction model')
     plt.legend(loc='lower right')
     plt.show()
     plt.savefig(output_path / f'{trait}_ROC_curve_{prefix}.png', bbox_inches='tight')

@@ -41,14 +41,6 @@ except FileNotFoundError:
     with open("config.yaml") as f:
         config = yaml.safe_load(f)
 
-FULL_NAME = {
-    'als': 'ALS',
-    'ftld': 'FTLD',
-    'vasc_dementia': 'Vascular Dementia',
-    'lewy_body': 'Lewy Body Dementia',
-    'hpp': 'Hypophosphatasia',
-    'celiac': 'Celiac Disease'
-}
 
 def setup_log(fn_log: Union[str, Path], mode: str = 'w') -> None:
     '''
@@ -81,7 +73,7 @@ def process_args() -> argparse.Namespace:
     parser.add_argument('--matched_controls_for_ML', type=int, default=1)
     parser.add_argument('--n_controls_per_case', type=int, default=5, 
                         help='Number of controls to use per case')
-    parser.add_argument('--use_smoten', type=int, default=1,
+    parser.add_argument('--use_smoten', type=int, default=0,
                         help='Whether to use SMOTEN for class balancing')
     
     args = parser.parse_args()
