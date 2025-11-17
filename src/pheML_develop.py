@@ -1,4 +1,5 @@
 import pandas as pd
+import polars as pl
 import numpy as np
 from scipy.stats import randint
 
@@ -10,8 +11,14 @@ from sklearn.neural_network import MLPClassifier
 from imblearn.over_sampling import SMOTEN
 from imblearn.pipeline import Pipeline
 
-from plotting import plot_feature_importances, compute_permutation_importance, plot_permutation_importance, plot_CM, plot_ROC
-
+from plotting import (
+    plot_feature_importances, 
+    compute_permutation_importance, 
+    plot_permutation_importance, 
+    plot_CM, 
+    plot_ROC, 
+    plot_precision_recall
+)
 
 try:
     from xgboost import XGBClassifier
@@ -125,7 +132,7 @@ def get_phecode_features(
 
     phecodes = {
         'hpp': [],
-        'celiac': ['557.1']
+        'celiac': ['557.1', '557']
     }
 
     if trait in phecodes:
@@ -228,14 +235,17 @@ def train_model(
         param_distributions=param_dist,
         n_iter=n_iter,
         cv=cv,
-        scoring='accuracy',
+        scoring='recall',
         verbose=verbose,
         random_state=random_state,
         n_jobs=n_jobs
     )
 
     random_search.fit(X_train, y_train)
-    best_model = random_search.best_estimator_
+    if use_smoten:
+        best_model = random_search.best_estimator_['model']
+    else:
+        best_model = random_search.best_estimator_
     best_model.fit(X_train, y_train)
     return best_model
 
@@ -289,8 +299,11 @@ def main() -> None:
     # Import case control and corresponding phecodes
     logging.info('Preparing data for model development...')
 
-    sd_phecode = pd.read_feather(config['phecode_binary_feather_file'])
-    all_sd_grids = sd_phecode.grid.to_list()
+    # Use Polars for efficient loading (lazy)
+    logging.info('Loading phecode data with Polars (lazy mode)...')
+    sd_phecode_lazy = pl.scan_ipc(config['phecode_binary_feather_file'])
+    all_sd_grids = sd_phecode_lazy.select('grid').collect()['grid'].to_list()
+    
     case_grid, control_grid = get_cases_and_controls(output_path / f'case_control_pairs_{prefix}.txt', 
                                                      potential_controls=all_sd_grids, 
                                                      n_controls_per_case=args.n_controls_per_case,
@@ -298,13 +311,18 @@ def main() -> None:
                                                      )
     number_of_cases = len(case_grid)
 
-    # case_grid = list(set(cases.GRID))
-    # control_grid = list(controls_clean.sample(n=len(case_grid)*30, random_state=2024).GRID)
+    # Optimization: Load only relevant samples (cases + controls) into memory
+    all_relevant_ids = list(set(case_grid) | set(control_grid))
+    logging.info(f'Loading {len(all_relevant_ids)} relevant samples (cases + controls)...')
+    sd_phecode_subset = (sd_phecode_lazy
+                         .filter(pl.col('grid').is_in(all_relevant_ids))
+                         .collect()
+                         .to_pandas())  # Convert to pandas for sklearn compatibility
 
     # Generate dataframe for case and control, add labels, and merge them
-    case_df = sd_phecode[sd_phecode.grid.isin(case_grid)]
+    case_df = sd_phecode_subset[sd_phecode_subset.grid.isin(case_grid)].copy()
     case_df['label'] = 1
-    control_df = sd_phecode[sd_phecode.grid.isin(control_grid)]
+    control_df = sd_phecode_subset[sd_phecode_subset.grid.isin(control_grid)].copy()
     control_df['label'] = 0
     data = pd.concat([case_df, control_df], ignore_index=True)
     # Ensure all feature columns are strings
@@ -332,8 +350,8 @@ def main() -> None:
 
     logging.info('Plotting model results...')
     # Call the feature importance plotting function (for models that support it)
-    if hasattr(final_model, "feature_importances_"):
-        plot_feature_importances(final_model, X_train, output_path, prefix, n_top=10, phecode_map=phecode_map)
+
+    plot_feature_importances(final_model, X_train, output_path, prefix, n_top=10, phecode_map=phecode_map)
     
     # Compute and plot permutation importance for all model types
     perm_results = compute_permutation_importance(
@@ -343,8 +361,9 @@ def main() -> None:
     plot_permutation_importance(perm_results, output_path, prefix, model_type, 
                                n_top=15, phecode_map=phecode_map)
     
-    precision = plot_CM(final_model, X_test, y_test, output_path, trait, prefix)
+    precision = plot_CM(final_model, X_test, y_test, output_path, model_type, trait, prefix)
     auc = plot_ROC(final_model, X_test, y_test, output_path, trait, model_type, prefix)
+    _ = plot_precision_recall(final_model, X_test, y_test, output_path, trait, model_type, prefix)
     logging.info(f'Precision is: {precision:.2f}')
     logging.info(f'AUC is: {auc:.2f}')
 

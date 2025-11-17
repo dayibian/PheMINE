@@ -1,6 +1,13 @@
 import pandas as pd
 import numpy as np
-from sklearn.metrics import precision_score, ConfusionMatrixDisplay, roc_curve, roc_auc_score
+from sklearn.metrics import (
+    precision_score,
+    ConfusionMatrixDisplay,
+    roc_curve,
+    roc_auc_score,
+    precision_recall_curve,
+    average_precision_score
+)
 from sklearn.inspection import permutation_importance
 import shap
 import matplotlib.pyplot as plt
@@ -14,6 +21,7 @@ def plot_CM(
     X: pd.DataFrame,
     y: pd.Series,
     output_path: Path,
+    model_type: str,
     trait: str,
     prefix: str
 ) -> float:
@@ -39,7 +47,7 @@ def plot_CM(
         )
     p = precision_score(y, model.predict(X))
     disp.ax_.set_title(f'Confusion Matrix of {trait} Prediction Model (Precision: {p:.2f}')
-    plt.savefig(output_path / f'{trait}_CM_{prefix}.png', bbox_inches='tight')
+    plt.savefig(output_path / f'{prefix}_{model_type}_CM.png', bbox_inches='tight')
     return p
 
 def plot_ROC(
@@ -81,8 +89,53 @@ def plot_ROC(
     plt.title(f'ROC Curve for {trait} prediction model')
     plt.legend(loc='lower right')
     plt.show()
-    plt.savefig(output_path / f'{trait}_ROC_curve_{prefix}.png', bbox_inches='tight')
+    plt.savefig(output_path / f'{prefix}_{model_type}_ROC_curve.png', bbox_inches='tight')
     return auc
+
+def plot_precision_recall(
+    final_model: Any,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    output_path: Path,
+    trait: str,
+    model_type: str,
+    prefix: str
+) -> float:
+    """
+    Plot Precision-Recall curve for testing data.
+
+    Args:
+        final_model (Any): Trained model
+        X_test (pd.DataFrame): Test features
+        y_test (pd.Series): Test labels
+        output_path (Path): Output directory
+        trait (str): Trait name
+        model_type (str): Model type
+        prefix (str): Output file prefix
+
+    Returns:
+        float: Average precision score
+    """
+    y_pred_prob = final_model.predict_proba(X_test)[:, 1]
+
+    precision, recall, _ = precision_recall_curve(y_test, y_pred_prob)
+    avg_precision = average_precision_score(y_test, y_pred_prob)
+
+    plt.figure()
+    plt.step(recall, precision, where='post', label=f'{model_type} (AP = {avg_precision:.2f})')
+    plt.fill_between(recall, precision, alpha=0.1, step='post')
+
+    positive_ratio = y_test.mean()
+    plt.axhline(positive_ratio, color='k', linestyle='--', label=f'Baseline (Prevalence = {positive_ratio:.2f})')
+
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'Precision-Recall Curve for {trait} prediction model')
+    plt.legend(loc='lower left')
+    plt.savefig(output_path / f'{prefix}_{model_type}_PR_curve.png', bbox_inches='tight')
+    plt.close()
+
+    return avg_precision
 
 def plot_feature_importances(
     model: Any,
@@ -276,7 +329,8 @@ def interpret_model(
     output_path: Path = Path('.'), 
     prefix: str = 'output', 
     plot: str = 'waterfall', 
-    show: bool = False
+    show: bool = False, 
+    model_type: str = 'tree'
 ) -> None:
     """
     Interpret a trained model for a specific patient (grid) using SHAP values.
@@ -308,7 +362,11 @@ def interpret_model(
     ]
 
     # Use SHAP to explain the model's predictions
-    explainer = shap.Explainer(model)
+    if model_type=='tree':
+        print('Using tree explainer')
+        explainer = shap.TreeExplainer(model)
+    else:
+        explainer = shap.Explainer(model)
     shap_values = explainer(X_phecode)
 
     idx = find_index_of_grid(data, grid)

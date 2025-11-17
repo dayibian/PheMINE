@@ -1,4 +1,7 @@
 # PheWES & PheML
+PheWES is a fully automated, modular pipeline for conducting phenome-wide enrichment studies and machine-learning–based phenotype prediction. Built with Snakemake for workflow orchestration and Python for data processing and modeling, the system provides a reproducible and scalable framework for exploring clinical phenotypes derived from ICD and phecode mappings.
+
+The pipeline includes robust modules for cohort construction, permutation-based phecode enrichment, and supervised learning models for disease prediction. Users configure workflows through a clean YAML-based interface, ensuring portability across systems and datasets. The project emphasizes reproducibility, software engineering best practices, and extensibility—supporting researchers who aim to transition from raw EHR data to statistically validated insights and deployable machine-learning outputs.
 
 ## Project Structure
 ```

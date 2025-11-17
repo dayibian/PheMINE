@@ -199,6 +199,27 @@ def get_frequencies(lst_ids, df_phecode_lazy, phecode_cols=None):
     
     return counts, frequencies  # Return counts and frequency as pandas Series
 
+def get_frequencies_fast(lst_ids, df_phecode_indexed, phecode_cols):
+    '''
+    Fast version that works with in-memory indexed data.
+    
+    Params:
+    - lst_ids: list of sample IDs to filter
+    - df_phecode_indexed: dict with 'df' (numpy array) and 'id_to_idx' (dict mapping IDs to indices)
+    - phecode_cols: list of phecode column names
+    
+    Returns: counts as numpy array
+    '''
+    # Get indices for the requested IDs (only those that exist in our data)
+    indices = [df_phecode_indexed['id_to_idx'][id_] for id_ in lst_ids if id_ in df_phecode_indexed['id_to_idx']]
+    
+    if len(indices) == 0:
+        return np.zeros(len(phecode_cols))
+    
+    # Fast numpy indexing and sum
+    counts = df_phecode_indexed['df'][indices, :].sum(axis=0)
+    return counts
+
 def main():
     args = process_args()
     start_time = time.time()
@@ -211,23 +232,50 @@ def main():
     lst_case = list(dict_control.keys()) # Update the case list, remove cases that have no matched controls
     
     logging.info('\n# Load binary phecode table (lazy loading with polars)')
-    df_phecode = pl.scan_ipc(args.phecode_binary_feather_file)
+    df_phecode_lazy = pl.scan_ipc(args.phecode_binary_feather_file)
     # Get schema info for logging (lazy - no data loaded yet)
-    schema_names = df_phecode.collect_schema().names()
+    schema_names = df_phecode_lazy.collect_schema().names()
     phecode_cols = [col for col in schema_names if col != 'grid']
     n_cols = len(phecode_cols)
     logging.info('# - Binary phecode table loaded (lazy). N phecodes: %s' % n_cols)
 
-    logging.info('\n# Calcualte frequency of each phecode in cases')
-    df_case_count, _ = get_frequencies(lst_case, df_phecode, phecode_cols)
+    # Optimization: Collect all relevant samples (cases + all controls) into memory once
+    logging.info('\n# Pre-loading relevant samples into memory for fast access')
+    all_relevant_ids = set(lst_case)
+    for controls in dict_control.values():
+        all_relevant_ids.update(controls)
+    all_relevant_ids = list(all_relevant_ids)
+    
+    logging.info('# - Loading %d relevant samples into memory' % len(all_relevant_ids))
+    df_phecode_subset = (df_phecode_lazy
+                         .filter(pl.col('grid').is_in(all_relevant_ids))
+                         .collect())
+    
+    # Create fast index for lookup
+    id_to_idx = {grid_id: idx for idx, grid_id in enumerate(df_phecode_subset['grid'].to_list())}
+    
+    # Convert to numpy for even faster operations
+    phecode_matrix = df_phecode_subset.select(phecode_cols).to_numpy()
+    logging.info('# - Data loaded into memory. Shape: %s' % str(phecode_matrix.shape))
+    
+    # Create indexed structure for fast lookups
+    df_phecode_indexed = {
+        'df': phecode_matrix,
+        'id_to_idx': id_to_idx
+    }
 
-    logging.info('\n# Calcualte frequency of each phecode in controls with permutation')
+    logging.info('\n# Calculate frequency of each phecode in cases')
+    case_counts = get_frequencies_fast(lst_case, df_phecode_indexed, phecode_cols)
+    df_case_count = pd.Series(case_counts, index=phecode_cols)
+
+    logging.info('\n# Calculate frequency of each phecode in controls with permutation')
     all_control_count = [] # Store counts of controls
     rng = np.random.default_rng(seed=2024)
     for i in range(args.n_permute):
-        lst_control_count, _ = get_frequencies(get_lst_controls(lst_case, dict_control, rng), df_phecode, phecode_cols)
-        all_control_count.append(lst_control_count)
-        if i%10==0: print(f'\r - Permutation {i+1}   ', end='', flush=True)
+        lst_control = get_lst_controls(lst_case, dict_control, rng)
+        control_counts = get_frequencies_fast(lst_control, df_phecode_indexed, phecode_cols)
+        all_control_count.append(pd.Series(control_counts, index=phecode_cols))
+        if i%100==0: print(f'\r - Permutation {i+1}   ', end='', flush=True)
     print(f'\r - Permutation {i+1}   ', end='\n')
     df_all_count = pd.concat([df_case_count]+all_control_count, axis=1).reset_index()
     df_all_count.columns = ['phecode', 'case_count'] + [f'control_count_{x+1}' for x in range(args.n_permute)]

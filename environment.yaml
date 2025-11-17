@@ -22,3 +22,4 @@ dependencies:
       - pyarrow>=19.0.0
       - shap>=0.48.0
       - snakemake>=9.8.0
+      - imbalanced-learn>=0.11.0
