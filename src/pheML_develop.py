@@ -333,8 +333,24 @@ def main() -> None:
     phecode_features_ = get_phecode_features(data_path, output_path, trait, prefix, number_of_cases)
     data[['grid']+phecode_features_+['label']].to_csv(output_path / f'{prefix}_data_for_ML.csv', index=False)
     # print(phecode_features_)
-    X_train, X_test, y_train, y_test = train_test_split(data[phecode_features_], data.label, train_size=0.8,
-                                                        random_state=2024, stratify=data.label)
+
+    def get_all_grids(case_control_file):
+        df = pd.read_csv(case_control_file, sep='\t')
+        case_grids = set(df['case'].dropna().tolist())
+        control_cols = [col for col in df.columns if col.startswith('Control')]
+        control_grids = set([g for g in pd.unique(df[control_cols].values.ravel()) if pd.notna(g)])
+        all_grids = case_grids | control_grids
+        return list(all_grids)
+
+    train_grids = get_all_grids(output_path / f'case_control_pairs_{prefix}_train.txt')
+    test_grids = get_all_grids(output_path / f'case_control_pairs_{prefix}_test.txt')
+
+    # X_train, X_test, y_train, y_test = train_test_split(data[phecode_features_], data.label, train_size=0.8,
+    #                                                     random_state=2024, stratify=data.label)
+    train_data = data[data.grid.isin(train_grids)]
+    test_data = data[data.grid.isin(test_grids)]
+    X_train, y_train = train_data[phecode_features_], train_data.label
+    X_test, y_test = test_data[phecode_features_], test_data.label
 
     logging.info('Training the model...')
     final_model = train_model(X_train, y_train, model_type=model_type, use_smoten=args.use_smoten)

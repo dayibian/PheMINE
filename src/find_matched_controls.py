@@ -60,6 +60,8 @@ def process_args() -> argparse.Namespace:
     parser.add_argument('--sd_demographics_file', help='Path to SD demographics file', type=str, default=config['sd_demographics_file'])
     parser.add_argument('--depth_of_record_path', help='Path to depth of record file', type=str, default=config['depth_of_record_path'])
     parser.add_argument('--control_exclusion_list', help='Path to control exclusion list file', type=str, default=None)
+    parser.add_argument('--train_split_ratio', help='Proportion of matched pairs for training split (0-1)', type=float,
+                        default=config.get('train_split_ratio', 0.8))
 
     args = parser.parse_args()
 
@@ -204,6 +206,29 @@ def main():
             found_controls.update(exclusive_matches_10)
             line = '\t'.join([case] + exclusive_matches_10) + '\n'
             fh.write(line)
+
+    # Save a portion of the case-control pairs as a training file according to train_split_ratio
+
+    # 1. Read the pairs file we just wrote
+    pairs_df = pd.read_csv(result_fp, sep='\t')
+
+    # 2. Calculate the number of training cases
+    n_cases = len(pairs_df)
+    n_train = int(args.train_split_ratio * n_cases)
+
+    # 3. Shuffle and split
+    pairs_df = pairs_df.sample(frac=1, random_state=2025).reset_index(drop=True)
+    train_df = pairs_df.iloc[:n_train]
+    test_df = pairs_df.iloc[n_train:]
+
+    # 4. Output files
+    train_fp = Path(args.result_path) / (args.result_filename + '_train.txt')
+    test_fp = Path(args.result_path) / (args.result_filename + '_test.txt')
+
+    train_df.to_csv(train_fp, sep='\t', index=False)
+    test_df.to_csv(test_fp, sep='\t', index=False)
+    logging.info(f"Saved {len(train_df)} training pairs to {train_fp}")
+    logging.info(f"Saved {len(test_df)} test pairs to {test_fp}")
 
     # Log execution time
     time_elapsed = time.time() - start_time

@@ -28,7 +28,7 @@ USE_SMOTEN = config.get("use_smoten", 0)
 
 rule all:
     input:
-        f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt",
+        f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}_train.txt",
         f"{RESULTS_DIR}/{OUTPUT_PREFIX}.counts_and_pval.txt",
         f"{RESULTS_DIR}/{TRAIT}_{OUTPUT_PREFIX}_enriched_phecode.csv",
         f"{RESULTS_DIR}/PheML_{MODEL_TYPE}_{OUTPUT_PREFIX}.model"
@@ -41,7 +41,7 @@ rule find_matched_controls:
         demographics=SD_DEMO_PATH,
         depth=DEPTH_OF_RECORD_PATH
     output:
-        f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt"
+        f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}_train.txt"
     params:
         icd_count=ICD_COUNT,
         result_path=RESULTS_DIR,
@@ -60,13 +60,13 @@ rule find_matched_controls:
 
 rule phecode_enrichment_with_permutation:
     input:
-        case_control_pairs=f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt"
+        case_control_pairs=f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}_train.txt"
     output:
         f"{RESULTS_DIR}/{OUTPUT_PREFIX}.counts_and_pval.txt"
     params:
         output_path=RESULTS_DIR,
         output_prefix=OUTPUT_PREFIX,
-        control_fn=f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}.txt",
+        control_fn=f"{RESULTS_DIR}/case_control_pairs_{OUTPUT_PREFIX}_train.txt",
         n_permute=N_PERMUTE
     conda:
         "environment.yaml"
