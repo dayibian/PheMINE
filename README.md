@@ -12,6 +12,20 @@ The pipeline includes robust modules for cohort construction, permutation-based 
 └── src/           # Source code
 ```
 
+## Data Requirements
+The pipeline requires the following data files. Paths should be configured in `config.yaml`.
+
+- **Demographics File** (`sd_demographics.csv`):
+  - Columns: `grid`, `birth_datetime` (YYYY-MM-DD), `gender_source_value`, `race_source_value`, `ethnicity_source_value`
+- **Depth of Record File** (`depth_of_record.csv`):
+  - Columns: `grid`, `depth_of_record` (integer, number of visits in unique days)
+- **Case File**:
+  - A CSV or text file containing at least a `grid` column defining the cases.
+- **Phecode Binary File** (`phecode_binary.feather`):
+  - A Feather format file containing a `grid` column and binary columns for each phecode (1 = present, 0 = absent).
+- **Control Exclusion List** (Optional):
+  - A file containing GRIDs to exclude from control selection.
+
 ## Setup
 1. Create and activate the conda environment using the provided environment.yaml:
 ```bash

@@ -71,9 +71,9 @@ def process_args() -> argparse.Namespace:
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_folder', help='High-level folder that contains data for each trait', type=str,
-                        default='/data100t1/home/biand/Projects/Comorbidity_analysis/data/')
+                        default='../data/')
     parser.add_argument('--output_folder', help='High-level folder that contains output for each trait', type=str,
-                        default='/data100t1/home/biand/Projects/Comorbidity_analysis/output/')
+                        default='../results/')
     parser.add_argument('--trait', help='Trait of interest', type=str, default='als')
     parser.add_argument('--output_prefix', type=str, default='output')
     parser.add_argument('--model_type', type=str, default='CART')
@@ -104,48 +104,51 @@ def process_args() -> argparse.Namespace:
     return args
 
 def get_phecode_features(
-    data_path: Path,
     output_path: Path,
     trait: str,
     prefix: str,
-    number_of_cases: int
+    number_of_cases: int,
+    phecode_map: pd.DataFrame,
+    cutoff_frequency: float = 0.02
 ) -> List[str]:
     '''
     Get enriched phecodes, drop those used for phenotyping.
     Args:
-        data_path (Path): Path to data directory
-        output_path (Path): Path to output directory
+        output_path (Path): Path to output directory, including the enriched phecode file
         trait (str): Trait of interest
+        prefix (str): Prefix for the output file
+        number_of_cases (int): Number of cases for the enrichment analysis
+        phecode_map (pd.DataFrame): Phecode map with columns including 'ICD' and 'Phecode'
+        cutoff_frequency (float): Cutoff frequency for the enriched phecodes, default is 0.02
     Returns:
         List[str]: List of phecode features (excluding those used for phenotyping)
     '''
     
-    icd_codes = {
-        'als': ['G12.21', 'G12.20', 'G12.24', 'G12.29', '335.20', '335.21', '335.29'],
-        'ftld': ['G31.01', 'G31.09', 'G21.1', 'G31.85', '331.11', '331.19', '331.6'],
-        'vasc_dementia': ['F01.50', 'F01.51', 'F01.511', 'F01.518', '290.40', '290.41'],
-        'lewy_body': ['G31.83', 'G20', 'F02.80', '331.82', '332.0', '294.10'],
-        'hpp': ['275.3', 'E83.39'],
-        'celiac': ['579.0', 'K90.0']
-    }
-
-
-    phecodes = {
-        'hpp': [],
-        'celiac': ['557.1', '557']
-    }
-
-    if trait in phecodes:
-        excluded_code = phecodes[trait]
-    else:
-        with gzip.open(data_path / f'{trait}/{trait}_codes_and_dates.csv.gz') as f:
-            case_codes = pd.read_csv(f, dtype={'phecode':str})
-        case_codes_ = case_codes[case_codes.concept_code.isin(icd_codes[trait])]
-        excluded_code = case_codes_.phecode.unique()
+    # Get excluded codes from config
+    excluded_code = []
+    
+    if 'excluded_codes' in config:
+        excluded_codes_config = config['excluded_codes']
+        
+        # Get ICD codes from config and convert to Phecodes using phecode_map
+        if 'ICD' in excluded_codes_config and excluded_codes_config['ICD']:
+            icd_codes_to_exclude = [str(code).strip() for code in excluded_codes_config['ICD']]
+            # Filter phecode_map to find matching Phecodes for the ICD codes
+            # Convert ICD column to string for matching
+            phecode_map_icd_str = phecode_map['ICD'].astype(str).str.strip()
+            icd_matches = phecode_map[phecode_map_icd_str.isin(icd_codes_to_exclude)]
+            # Get unique Phecodes and strip whitespace
+            phecodes_from_icd = icd_matches['Phecode'].astype(str).str.strip().unique().tolist()
+            excluded_code.extend(phecodes_from_icd)
+        
+        # Get Phecode list directly from config
+        if 'Phecode' in excluded_codes_config and excluded_codes_config['Phecode']:
+            phecodes_to_exclude = [str(code).strip() for code in excluded_codes_config['Phecode']]
+            excluded_code.extend(phecodes_to_exclude)
     
     # Get enriched phecode
     enrich_results = pd.read_csv(output_path / f'{trait}_{prefix}_enriched_phecode.csv', sep='\t', dtype={'Phecode':str})
-    enrich_results = enrich_results[enrich_results.Count > number_of_cases * .01] # Remove those phecodes that has counts less than 1% of case number, regardless of significance
+    enrich_results = enrich_results[enrich_results.Count > number_of_cases * cutoff_frequency] # Remove those phecodes that has counts less than the cutoff frequency of case number, regardless of significance
     phecode_features = enrich_results.Phecode.astype(str).unique().tolist()
     
     excluded_set = set(excluded_code)
@@ -235,7 +238,7 @@ def train_model(
         param_distributions=param_dist,
         n_iter=n_iter,
         cv=cv,
-        scoring='recall',
+        scoring='accuracy',
         verbose=verbose,
         random_state=random_state,
         n_jobs=n_jobs
@@ -290,7 +293,6 @@ def main() -> None:
     '''
     args = process_args()
     trait = args.trait
-    data_path = Path(args.data_folder)
     output_path = Path(args.output_folder)
     prefix = args.output_prefix
     model_type = args.model_type
@@ -330,7 +332,8 @@ def main() -> None:
     # data[feature_cols] = data[feature_cols].astype(str)
     # print(data.head())
 
-    phecode_features_ = get_phecode_features(data_path, output_path, trait, prefix, number_of_cases)
+    phecode_map = pd.read_csv(config['phecode_map_file'], dtype={'Phecode':str})
+    phecode_features_ = get_phecode_features(output_path, trait, prefix, number_of_cases*0.8, phecode_map)
     data[['grid']+phecode_features_+['label']].to_csv(output_path / f'{prefix}_data_for_ML.csv', index=False)
     # print(phecode_features_)
 
@@ -356,7 +359,7 @@ def main() -> None:
     final_model = train_model(X_train, y_train, model_type=model_type, use_smoten=args.use_smoten)
 
     logging.info('Reading phecode map...')
-    phecode_map = pd.read_csv(config['phecode_map_file'], dtype={'Phecode':str})
+    
     phecode_map = phecode_map[['Phecode', 'PhecodeString']].drop_duplicates(ignore_index=True)
     phecode_map.Phecode = phecode_map.Phecode.apply(lambda x: x.strip())
     phecode_map.index = phecode_map.Phecode

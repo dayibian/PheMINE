@@ -43,9 +43,9 @@ def process_args():
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_folder', help='High-level folder that contains data for each trait', type=str,
-                        default='/data100t1/home/biand/Projects/Comorbidity_analysis/data/')
+                        default='../data/')
     parser.add_argument('--output_folder', help='High-level folder that contains output for each trait', type=str,
-                        default='/data100t1/home/biand/Projects/Comorbidity_analysis/output/')
+                        default='../results/')
     parser.add_argument('--trait', help='Trait of interest', type=str, default='als')
     parser.add_argument('--input_prefix', help='The prefix for the input file.', type=str, default='output')
     parser.add_argument('--phecode_map_file', type=str, default=config['phecode_map_file'], help='Path to the phecode map file')

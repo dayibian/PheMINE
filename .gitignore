@@ -46,6 +46,8 @@ data/*
 !data/.gitkeep
 !data/test_case.csv
 
+!data/sample_data/
+!data/sample_data/*
 
 # Snakemake
 .snakemake/

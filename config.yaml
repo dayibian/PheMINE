@@ -9,14 +9,23 @@ output_prefix: screening # Output prefix
 n_permute: 10000 # Number of permutations for phecode enrichment analysis
 model_type: XG # Model type, choose from CART, RF, XG, or NN/MLP
 use_matched_controls: 1 # Whether to use matched controls for ML, 1 for yes, 0 for no
-n_controls_per_case: 5 # Number of controls to use per case
+n_controls_per_case: 6 # Number of controls to use per case
 use_smoten: 0 # Whether to use SMOTEN for class balancing, 1 for yes, 0 for no
 train_split_ratio: 0.8 # Proportion of matched pairs allocated to the training split
+excluded_codes: # List of ICD codes and Phecodes to exclude from the ML pipeline (typically used for phenotyping)
+  ICD:
+    - '307.1'
+    - 'F50.00'
+    - 'F50.01'
+    - 'F50.02'
+  Phecode:
+    - '305.21'
+    - '305.2'
 
 # Data file paths
 # phecode_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/all-sd-codes.csv.gz
 phecode_binary_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/sd_samples_phecode.binary.txt.gz
-# phecode_binary_feather_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/sd_samples_phecode.binary.feather
+phecode_binary_feather_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/sd_samples_phecode.binary.feather
 # phecode_count_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/sd_samples_phecode.count.txt.gz
 phecode_map_file: /data100t1/share/synthetic-deriv/phecodes/ICD_Phecode_mapping.csv # Map between ICD codes and Phecodes and corresponding Phecode strings
 sd_demographics_file: /data100t1/share/synthetic-deriv/demographic-releases/2025-mar-19/sd_demographics.csv.gz
@@ -25,8 +34,12 @@ sd_demographics_file: /data100t1/share/synthetic-deriv/demographic-releases/2025
 # control_exclusion_list: /data100t1/home/biand/Projects/PheWES/data/celiac_GRIDs_not_controls.txt
 # depth_of_record_path: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/depth_of_record_in_sd.csv
 
+# Celiac
 phecode_file: /data100t1/home/biand/Projects/Celiac_Project/data/phecode_before_positive_1113.csv.gz
 phecode_binary_feather_file: /data100t1/home/biand/Projects/Celiac_Project/data/binary_phecode_1113.feather
 case_path: /data100t1/home/biand/Projects/Celiac_Project/data/celiac_ttg_iga_positive_grids_1113.txt
 control_exclusion_list: /data100t1/home/biand/Projects/Celiac_Project/data/exluded_grids.txt
 depth_of_record_path: /data100t1/home/biand/Projects/Celiac_Project/data/grid_depth_1113.csv
+
+# AN
+# phecode_binary_feather_file: /data100t1/home/biand/Projects/PheWES/data/an_binary_phecode.feather

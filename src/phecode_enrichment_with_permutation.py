@@ -2,7 +2,7 @@
 '''
 Example call:
 
-python /data100t1/home/wanying/BioVU/202409_celiac_project/code/utils/phecode_enrichment_with_permutation.py \
+python ../src/phecode_enrichment_with_permutation.py \
 --case_fn ./sample_data/case_list.txt \
 --control_fn ./sample_data/control_list.txt \
 --output_path ./ \
