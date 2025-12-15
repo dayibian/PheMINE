@@ -12,7 +12,7 @@ use_matched_controls: 1 # Whether to use matched controls for ML, 1 for yes, 0 f
 n_controls_per_case: 6 # Number of controls to use per case
 use_smoten: 0 # Whether to use SMOTEN for class balancing, 1 for yes, 0 for no
 train_split_ratio: 0.8 # Proportion of matched pairs allocated to the training split
-excluded_codes: # List of ICD codes and Phecodes to exclude from the ML pipeline (typically used for phenotyping)
+excluded_codes: # List of ICD codes and Phecodes to exclude from the ML pipeline (these are typically used for phenotyping)
   ICD:
     - '307.1'
     - 'F50.00'
@@ -34,7 +34,7 @@ sd_demographics_file: /data100t1/share/synthetic-deriv/demographic-releases/2025
 # control_exclusion_list: /data100t1/home/biand/Projects/PheWES/data/celiac_GRIDs_not_controls.txt
 # depth_of_record_path: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/depth_of_record_in_sd.csv
 
-# Celiac
+# Celiac project
 phecode_file: /data100t1/home/biand/Projects/Celiac_Project/data/phecode_before_positive_1113.csv.gz
 phecode_binary_feather_file: /data100t1/home/biand/Projects/Celiac_Project/data/binary_phecode_1113.feather
 case_path: /data100t1/home/biand/Projects/Celiac_Project/data/celiac_ttg_iga_positive_grids_1113.txt
@@ -43,3 +43,10 @@ depth_of_record_path: /data100t1/home/biand/Projects/Celiac_Project/data/grid_de
 
 # AN
 # phecode_binary_feather_file: /data100t1/home/biand/Projects/PheWES/data/an_binary_phecode.feather
+
+# Example data paths (for testing or demonstration purposes), uncomment the following lines to use the example data
+# phecode_file: data/sample_data/phecode_data.csv.gz
+# phecode_binary_file: data/sample_data/phecode_binary.txt.gz
+# case_path: data/sample_data/case_grids.txt
+# control_exclusion_list: data/sample_data/control_exclusion.txt
+# depth_of_record_path: data/sample_data/depth_of_record.csv

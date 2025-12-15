@@ -186,7 +186,7 @@ def train_model(
             'min_samples_leaf': randint(1, 10),
             'max_features': randint(max(1, m // 2), m)
         }
-        base_model = DecisionTreeClassifier(random_state=random_state)
+        base_model = DecisionTreeClassifier(random_state=random_state, class_weight='balanced')
         n_iter = 10
     elif model_type.upper() == 'RF':
         param_dist = {
@@ -196,7 +196,7 @@ def train_model(
             'min_samples_leaf': [1, 2, 4],
             'bootstrap': [True, False]
         }
-        base_model = RandomForestClassifier(random_state=random_state)
+        base_model = RandomForestClassifier(random_state=random_state, class_weight='balanced')
         n_iter = 50
     elif model_type.upper() == 'XG':
         param_dist = {
