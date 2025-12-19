@@ -122,7 +122,7 @@ def main():
 
         enriched_phecode.loc[i] = [code, desc, int(case_count), pval] + stats + [max_count, ratio]
 
-    enriched_phecode = enriched_phecode[enriched_phecode.Description!='NA']
+    # enriched_phecode = enriched_phecode[enriched_phecode.Description!='NA']
     enriched_phecode.sort_values(by='case_to_control_ratio', ascending=False, inplace=True)
     enriched_phecode.to_csv(output_path / f'{TRAIT}_{prefix}_enriched_phecode.csv', sep='\t', index=False)
 
