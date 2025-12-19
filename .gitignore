@@ -64,3 +64,4 @@ report.html
 /.shadow_*
 # Exclude Snakemake lock files
 .snakefile.lock
+src/generate_sample_data.py
