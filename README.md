@@ -82,7 +82,7 @@ All models undergo hyperparameter tuning using `RandomizedSearchCV` with 5-fold 
 ## Model Interpretation
 To help users understand how the trained models make predictions, the pipeline supports **SHAP (SHapley Additive exPlanations)**. SHAP values provide a unified measure of feature importance, showing how much each feature contributes to the model's output for a given prediction.
 
-The pipeline automatically generates SHAP summary plots and waterfall plots to visualize these contributions. Below is an example of a SHAP waterfall plot, which breaks down the prediction for an individual sample:
+The pipeline provides functions to generate SHAP summary plots and waterfall plots to visualize these contributions. Below is an example of a SHAP waterfall plot, which breaks down the prediction for an individual sample:
 
 ![SHAP Waterfall Plot Example](assets/waterfall_test.png)
 
