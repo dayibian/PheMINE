@@ -5,11 +5,11 @@ from scipy.stats import randint
 
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+import optuna
 
 from sklearn.neural_network import MLPClassifier
-from imblearn.over_sampling import SMOTEN
-from imblearn.pipeline import Pipeline
+
 
 from plotting import (
     plot_feature_importances, 
@@ -80,8 +80,7 @@ def process_args() -> argparse.Namespace:
     parser.add_argument('--matched_controls_for_ML', type=int, default=1)
     parser.add_argument('--n_controls_per_case', type=int, default=5, 
                         help='Number of controls to use per case')
-    parser.add_argument('--use_smoten', type=int, default=0,
-                        help='Whether to use SMOTEN for class balancing')
+
     
     args = parser.parse_args()
 
@@ -160,97 +159,119 @@ def train_model(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     model_type: str = 'RF',
-    use_smoten: bool = False,
     random_state: int = 42,
     verbose: int = 2,
     n_jobs: int = -1
 ) -> Any:
     '''
-    Train a machine learning model with hyperparameter tuning.
+    Train a machine learning model with hyperparameter tuning using Optuna.
     Args:
         X_train (pd.DataFrame): Training features
         y_train (pd.Series): Training labels
         model_type (str): 'CART', 'RF', 'XG', or 'NN'/'MLP'
-        use_smoten (bool): Whether to use SMOTEN for class balancing
         random_state (int): Random seed
         verbose (int): Verbosity level
         n_jobs (int): Number of parallel jobs
     Returns:
         Any: The best trained model
     '''
-    if model_type.upper() == 'CART':
-        m = X_train.shape[1]
-        param_dist = {
-            'max_depth': randint(1, 10),
-            'min_samples_split': randint(2, 20),
-            'min_samples_leaf': randint(1, 10),
-            'max_features': randint(max(1, m // 2), m)
-        }
-        base_model = DecisionTreeClassifier(random_state=random_state, class_weight='balanced')
-        n_iter = 10
-    elif model_type.upper() == 'RF':
-        param_dist = {
-            'n_estimators': [10, 50, 100, 200],
-            'max_depth': [None, 10, 20, 30, 40],
-            'min_samples_split': [2, 5, 10],
-            'min_samples_leaf': [1, 2, 4],
-            'bootstrap': [True, False]
-        }
-        base_model = RandomForestClassifier(random_state=random_state, class_weight='balanced')
-        n_iter = 50
-    elif model_type.upper() == 'XG':
-        param_dist = {
-            'n_estimators': [50, 100, 200],
-            'learning_rate': [0.01, 0.1, 0.2],
-            'max_depth': [3, 5, 7],
-            'colsample_bytree': [0.6, 0.8, 1.0],
-            'subsample': [0.7, 0.8, 1.0],
-            'reg_alpha': [0, 0.1, 1],
-            'reg_lambda': [1, 1.5, 2]
-        }
-        base_model = XGBClassifier(eval_metric='logloss', random_state=random_state, use_label_encoder=False)
-        n_iter = 20
-    elif model_type.upper() in ['NN', 'MLP']:
-        param_dist = {
-            'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 50), (100, 100)],
-            'activation': ['relu', 'tanh', 'logistic'],
-            'solver': ['adam', 'sgd'],
-            'alpha': [0.0001, 0.001, 0.01],
-            'learning_rate': ['constant', 'adaptive'],
-        }
-        base_model = MLPClassifier(max_iter=500, random_state=random_state)
-        n_iter = 20
-    else:
-        raise ValueError(f"Unknown model_type: {model_type}. Choose from 'CART', 'RF', 'XG', or 'NN'/'MLP'.")
-
-    if use_smoten:
-        pipeline = Pipeline([
-            ('smote', SMOTEN(random_state=random_state)),
-            ('model', base_model)
-        ])
-        param_dist = {'model__' + k: v for k, v in param_dist.items()}
-    else:
-        pipeline = base_model
     
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    random_search = RandomizedSearchCV(
-        estimator=pipeline,
-        param_distributions=param_dist,
-        n_iter=n_iter,
-        cv=cv,
-        scoring='accuracy',
-        verbose=verbose,
-        random_state=random_state,
-        n_jobs=n_jobs
-    )
+    def objective(trial):
+        if model_type.upper() == 'CART':
+            m = X_train.shape[1]
+            params = {
+                'max_depth': trial.suggest_int('max_depth', 1, 10),
+                'min_samples_split': trial.suggest_int('min_samples_split', 2, 20),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 10),
+                'max_features': trial.suggest_int('max_features', max(1, m // 2), m),
+                'random_state': random_state,
+                'class_weight': 'balanced'
+            }
+            base_model = DecisionTreeClassifier(**params)
+            
+        elif model_type.upper() == 'RF':
+            params = {
+                'n_estimators': trial.suggest_categorical('n_estimators', [10, 50, 100, 200]),
+                'max_depth': trial.suggest_categorical('max_depth', [None, 10, 20, 30, 40]),
+                'min_samples_split': trial.suggest_categorical('min_samples_split', [2, 5, 10]),
+                'min_samples_leaf': trial.suggest_categorical('min_samples_leaf', [1, 2, 4]),
+                'bootstrap': trial.suggest_categorical('bootstrap', [True, False]),
+                'random_state': random_state,
+                'class_weight': 'balanced'
+            }
+            base_model = RandomForestClassifier(**params)
+            
+        elif model_type.upper() == 'XG':
+            params = {
+                'n_estimators': trial.suggest_categorical('n_estimators', [50, 100, 200]),
+                'learning_rate': trial.suggest_categorical('learning_rate', [0.01, 0.1, 0.2]),
+                'max_depth': trial.suggest_categorical('max_depth', [3, 5, 7]),
+                'colsample_bytree': trial.suggest_categorical('colsample_bytree', [0.6, 0.8, 1.0]),
+                'subsample': trial.suggest_categorical('subsample', [0.7, 0.8, 1.0]),
+                'reg_alpha': trial.suggest_categorical('reg_alpha', [0, 0.1, 1]),
+                'reg_lambda': trial.suggest_categorical('reg_lambda', [1, 1.5, 2]),
+                'eval_metric': 'logloss',
+                'random_state': random_state,
+                'use_label_encoder': False
+            }
+            base_model = XGBClassifier(**params)
+            
+        elif model_type.upper() in ['NN', 'MLP']:
+            params = {
+                'hidden_layer_sizes': trial.suggest_categorical('hidden_layer_sizes', [(50,), (100,), (50, 50), (100, 50), (100, 100)]),
+                'activation': trial.suggest_categorical('activation', ['relu', 'tanh', 'logistic']),
+                'solver': trial.suggest_categorical('solver', ['adam', 'sgd']),
+                'alpha': trial.suggest_categorical('alpha', [0.0001, 0.001, 0.01]),
+                'learning_rate': trial.suggest_categorical('learning_rate', ['constant', 'adaptive']),
+                'max_iter': 500,
+                'random_state': random_state
+            }
+            base_model = MLPClassifier(**params)
+        else:
+            raise ValueError(f"Unknown model_type: {model_type}. Choose from 'CART', 'RF', 'XG', or 'NN'/'MLP'.")
 
-    random_search.fit(X_train, y_train)
-    if use_smoten:
-        best_model = random_search.best_estimator_['model']
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        scores = cross_val_score(base_model, X_train, y_train, cv=cv, scoring='accuracy', n_jobs=n_jobs)
+        return scores.mean()
+
+    # Determine number of trials based on previous n_iter logic
+    if model_type.upper() == 'CART':
+        n_trials = 10
+    elif model_type.upper() == 'RF':
+        n_trials = 50
+    elif model_type.upper() == 'XG':
+        n_trials = 20
+    elif model_type.upper() in ['NN', 'MLP']:
+        n_trials = 20
     else:
-        best_model = random_search.best_estimator_
-    best_model.fit(X_train, y_train)
-    return best_model
+        n_trials = 20
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING if verbose < 2 else optuna.logging.INFO)
+    study = optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler(seed=random_state))
+    study.optimize(objective, n_trials=n_trials)
+
+    if verbose > 0:
+        logging.info(f"Best trial parameters: {study.best_params}")
+        logging.info(f"Best cross-validation accuracy: {study.best_value}")
+
+    # Recreate the best model
+    best_params = study.best_params
+    
+    if model_type.upper() == 'CART':
+        final_params = {**best_params, 'random_state': random_state, 'class_weight': 'balanced'}
+        final_model = DecisionTreeClassifier(**final_params)
+    elif model_type.upper() == 'RF':
+        final_params = {**best_params, 'random_state': random_state, 'class_weight': 'balanced'}
+        final_model = RandomForestClassifier(**final_params)
+    elif model_type.upper() == 'XG':
+        final_params = {**best_params, 'eval_metric': 'logloss', 'random_state': random_state, 'use_label_encoder': False}
+        final_model = XGBClassifier(**final_params)
+    elif model_type.upper() in ['NN', 'MLP']:
+        final_params = {**best_params, 'max_iter': 500, 'random_state': random_state}
+        final_model = MLPClassifier(**final_params)
+        
+    final_model.fit(X_train, y_train)
+    return final_model
 
 def get_cases_and_controls(
     pair_file: Union[str, Path],
@@ -364,7 +385,8 @@ def main() -> None:
     X_test, y_test = test_data[phecode_features_], test_data.label
 
     logging.info('Training the model...')
-    final_model = train_model(X_train, y_train, model_type=model_type, use_smoten=args.use_smoten)
+    final_model = train_model(X_train, y_train, model_type=model_type)
+
 
     logging.info('Reading phecode map...')
     

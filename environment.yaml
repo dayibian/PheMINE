@@ -22,5 +22,5 @@ dependencies:
       - pyarrow==22.0.0
       - shap==0.50.0
       - snakemake==9.13.7
-      - imbalanced-learn==0.14.0
       - xgboost==3.1.2
+      - optuna==4.6.0

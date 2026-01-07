@@ -77,7 +77,7 @@ The pipeline currently supports the following machine learning models, which can
 - **XGBoost** (`XG`): Gradient boosting framework. Efficient and often provides state-of-the-art results.
 - **Neural Network** (`NN` or `MLP`): Multi-layer Perceptron. Capable of capturing complex non-linear relationships.
 
-All models undergo hyperparameter tuning using `RandomizedSearchCV` with 5-fold stratified cross-validation. Additionally, the pipeline supports **SMOTEN** (`use_smoten`) for handling class imbalance, ensuring robust performance even with unbalanced datasets.
+All models undergo hyperparameter tuning using **Optuna** with 5-fold stratified cross-validation, optimizing for accuracy.
 
 ## Model Interpretation
 To help users understand how the trained models make predictions, the pipeline supports **SHAP (SHapley Additive exPlanations)**. SHAP values provide a unified measure of feature importance, showing how much each feature contributes to the model's output for a given prediction.

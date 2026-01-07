@@ -3,24 +3,23 @@
 # General pipeline configuration
 trait: test # Trait of interest
 icd_count: -1 # Number of ICD codes needed to classify as a case, if -1, all cases will be included
-results_dir: results/testing # Results directory
+results_dir: results/testing0107 # Results directory
 data_dir: data # Data directory
 output_prefix: testing # Output prefix
 n_permute: 1000 # Number of permutations for phecode enrichment analysis, increase for more accurate p-value
-model_type: CART # Model type, choose from CART, RF, XG, or NN/MLP
+model_type: RF # Model type, choose from CART, RF, XG, or NN/MLP
 use_matched_controls: 1 # Whether to use matched controls for ML, 1 for yes, 0 for no
 n_controls_per_case: 6 # Number of controls to use per case
-use_smoten: 0 # Whether to use SMOTEN for class balancing, 1 for yes, 0 for no
 train_split_ratio: 0.8 # Proportion of matched pairs allocated to the training split
 excluded_codes: # List of ICD codes and Phecodes to exclude from the ML pipeline (these are typically used for phenotyping)
   ICD:
-    - '307.1'
-    - 'F50.00'
-    - 'F50.01'
-    - 'F50.02'
+    # - '307.1'
+    # - 'F50.00'
+    # - 'F50.01'
+    # - 'F50.02'
   Phecode:
-    - '305.21'
-    - '305.2'
+    # - '305.21'
+    # - '305.2'
 
 # Data file paths (project agnostic)
 # phecode_binary_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/sd_samples_phecode.binary.txt.gz
