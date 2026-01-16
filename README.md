@@ -80,13 +80,23 @@ The pipeline currently supports the following machine learning models, which can
 All models undergo hyperparameter tuning using **Optuna** with 5-fold stratified cross-validation, optimizing for accuracy.
 
 ## Model Interpretation
-To help users understand how the trained models make predictions, the pipeline supports **SHAP (SHapley Additive exPlanations)**. SHAP values provide a unified measure of feature importance, showing how much each feature contributes to the model's output for a given prediction.
+Understanding how models make predictions is crucial for clinical validity. The pipeline provides both **global** (cohort-level) and **local** (subject-level) explanations.
 
-The pipeline provides functions to generate SHAP summary plots and waterfall plots to visualize these contributions. Below is an example of a SHAP waterfall plot, which breaks down the prediction for an individual sample:
+### Global Explanation
+Global feature importance highlights the most influential features across the entire dataset, helping to identify general risk factors driving the model's performance.
+
+![Global Feature Importance](assets/0902_rf_feature_importance_top10.png)
+
+This plot is generated using the `plot_feature_importance` function from the `src.plotting` module. It's automatically generated when running the pipeline.
+
+### Local Explanation
+For individual predictions, the pipeline uses **SHAP (SHapley Additive exPlanations)**. SHAP values quantify the contribution of each feature to a specific patient's risk score, offering a personalized explanation.
+
+Below is an example of a SHAP waterfall plot, which breaks down the prediction for an individual sample:
 
 ![SHAP Waterfall Plot Example](assets/waterfall_test.png)
 
-This visualization allows researchers to identify which phecodes or demographic features pushed the model's prediction towards a specific disease risk.
+This visualization allows researchers to identify which phecodes pushed the model's prediction towards a specific disease risk.
 
 ### Generating Interpretations
 You can generate these plots programmatically using the `interpret_model` function:
