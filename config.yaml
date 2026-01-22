@@ -11,6 +11,7 @@ model_type: RF # Model type, choose from CART, RF, XG, or NN/MLP
 use_matched_controls: 1 # Whether to use matched controls for ML, 1 for yes, 0 for no
 n_controls_per_case: 6 # Number of controls to use per case
 train_split_ratio: 0.8 # Proportion of matched pairs allocated to the training split
+min_phecode_frequency: 0.02 # Minimum frequency of a phecode to be included as a feature
 excluded_codes: # List of ICD codes and Phecodes to exclude from the ML pipeline (these are typically used for phenotyping)
   ICD:
     # - '307.1'

@@ -102,6 +102,33 @@ def main():
 
     results_sig.loc[:, 'PhecodeString'] = results_sig.phecode.apply(find_phecode_string)
     results_sig = results_sig.sort_values(by='phecode', ignore_index=True)
+    
+    # Filter by minimum frequency
+    min_phecode_frequency = config.get('min_phecode_frequency', 0.02)
+    
+    # Try to find case control file to get total number of cases
+    case_file_train = output_path / f'case_control_pairs_{prefix}_train.txt'
+    case_file_all = output_path / f'case_control_pairs_{prefix}.txt'
+    
+    total_cases = 0
+    if case_file_train.exists():
+        logging.info(f'Reading case control file: {case_file_train}')
+        case_df = pd.read_csv(case_file_train, sep='\t')
+        total_cases = len(case_df['case'].dropna().unique())
+    elif case_file_all.exists():
+        logging.info(f'Reading case control file: {case_file_all}')
+        case_df = pd.read_csv(case_file_all, sep='\t')
+        total_cases = len(case_df['case'].dropna().unique())
+    else:
+        logging.warning("Could not find case control file (checked _train.txt and .txt). Cannot filter by frequency.")
+    
+    if total_cases > 0:
+        logging.info(f'Total number of cases: {total_cases}')
+        logging.info(f'Minimum frequency threshold: {min_phecode_frequency} (Count > {total_cases * min_phecode_frequency})')
+        n_before = len(results_sig)
+        results_sig = results_sig[results_sig['case_count'] > total_cases * min_phecode_frequency]
+        n_after = len(results_sig)
+        logging.info(f'Filtered {n_before - n_after} phecodes with low frequency.')
     # results_sig.head()
 
     enriched_phecode = pd.DataFrame(columns=['Phecode', 'Description', 'Count', 'p.value',

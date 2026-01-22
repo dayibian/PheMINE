@@ -108,7 +108,7 @@ def get_phecode_features(
     prefix: str,
     number_of_cases: int,
     phecode_map: pd.DataFrame,
-    cutoff_frequency: float = 0.02
+    min_phecode_frequency: float = 0.02
 ) -> List[str]:
     '''
     Get enriched phecodes, drop those used for phenotyping.
@@ -118,7 +118,7 @@ def get_phecode_features(
         prefix (str): Prefix for the output file
         number_of_cases (int): Number of cases for the enrichment analysis
         phecode_map (pd.DataFrame): Phecode map with columns including 'ICD' and 'Phecode'
-        cutoff_frequency (float): Cutoff frequency for the enriched phecodes, default is 0.02
+        min_phecode_frequency (float): Minimum frequency for the enriched phecodes, default is 0.02
     Returns:
         List[str]: List of phecode features (excluding those used for phenotyping)
     '''
@@ -147,7 +147,7 @@ def get_phecode_features(
     
     # Get enriched phecode
     enrich_results = pd.read_csv(output_path / f'{trait}_{prefix}_enriched_phecode.csv', sep='\t', dtype={'Phecode':str})
-    enrich_results = enrich_results[enrich_results.Count > number_of_cases * cutoff_frequency] # Remove those phecodes that has counts less than the cutoff frequency of case number, regardless of significance
+    enrich_results = enrich_results[enrich_results.Count > number_of_cases * min_phecode_frequency] # Remove those phecodes that has counts less than the cutoff frequency of case number, regardless of significance
     phecode_features = enrich_results.Phecode.astype(str).unique().tolist()
     
     excluded_set = set(excluded_code)
@@ -354,7 +354,8 @@ def main() -> None:
     # print(data.head())
 
     phecode_map = pd.read_csv(config['phecode_map_file'], dtype={'Phecode':str})
-    phecode_features_ = get_phecode_features(output_path, trait, prefix, number_of_cases*0.8, phecode_map)
+    min_phecode_frequency = config.get('min_phecode_frequency', 0.02)
+    phecode_features_ = get_phecode_features(output_path, trait, prefix, number_of_cases*0.8, phecode_map, min_phecode_frequency=min_phecode_frequency)
     
     if not phecode_features_:
         logging.info("No enriched phecode found. Model training will be skipped.")
