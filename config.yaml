@@ -11,21 +11,21 @@ model_type: RF # Model type, choose from CART, RF, XG, or NN/MLP
 use_matched_controls: 1 # Whether to use matched controls for ML, 1 for yes, 0 for no
 n_controls_per_case: 6 # Number of controls to use per case
 train_split_ratio: 0.8 # Proportion of matched pairs allocated to the training split
-min_phecode_frequency: 0.02 # Minimum frequency of a phecode to be included as a feature
+min_phecode_frequency: 0.0246 # Minimum frequency of a phecode to be included as a feature
 excluded_codes: # List of ICD codes and Phecodes to exclude from the ML pipeline (these are typically used for phenotyping)
   ICD:
-    # - '307.1'
-    # - 'F50.00'
-    # - 'F50.01'
-    # - 'F50.02'
+    - '307.1'
+    - 'F50.00'
+    - 'F50.01'
+    - 'F50.02'
   Phecode:
-    # - '305.21'
-    # - '305.2'
+    - '305.21'
+    - '305.2'
 
 # Data file paths (project agnostic)
 # phecode_binary_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/sd_samples_phecode.binary.txt.gz
 # phecode_binary_feather_file: /data100t1/share/synthetic-deriv/phecodes/all-sd-phecodes-mar-2025/sd_samples_phecode.binary.feather
-# phecode_map_file: /data100t1/share/synthetic-deriv/phecodes/ICD_Phecode_mapping.csv # Map between ICD codes and Phecodes and corresponding Phecode strings
+phecode_map_file: /data100t1/share/synthetic-deriv/phecodes/ICD_Phecode_mapping.csv # Map between ICD codes and Phecodes and corresponding Phecode strings
 # demographics_file: /data100t1/share/synthetic-deriv/demographic-releases/2025-mar-19/sd_demographics.csv.gz
 
 # HPP project
@@ -41,12 +41,12 @@ excluded_codes: # List of ICD codes and Phecodes to exclude from the ML pipeline
 # depth_of_record_path: /data100t1/home/biand/Projects/Celiac_Project/data/grid_depth_1113.csv
 
 # AN
-# phecode_binary_feather_file: /data100t1/home/biand/Projects/PheWES/data/an_binary_phecode.feather
+phecode_binary_feather_file: /data100t1/home/biand/Projects/PheWES/results/an_0130/binary_phecode.feather
 
 # Example data paths (for testing or demonstration purposes), uncomment the following lines to use the example data
-phecode_map_file: data/sample_data/ICD_Phecode_mapping.csv
-demographics_file: data/sample_data/demographics.csv
-phecode_binary_feather_file: data/sample_data/phecode_binary.feather
-case_path: data/sample_data/cases.csv
-control_exclusion_list: data/sample_data/excluded_controls.txt
-depth_of_record_path: data/sample_data/depth_of_record.csv
+# phecode_map_file: data/sample_data/ICD_Phecode_mapping.csv
+# demographics_file: data/sample_data/demographics.csv
+# phecode_binary_feather_file: data/sample_data/phecode_binary.feather
+# case_path: data/sample_data/cases.csv
+# control_exclusion_list: data/sample_data/excluded_controls.txt
+# depth_of_record_path: data/sample_data/depth_of_record.csv

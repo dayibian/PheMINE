@@ -384,6 +384,9 @@ def main() -> None:
     test_data = data[data.grid.isin(test_grids)]
     X_train, y_train = train_data[phecode_features_], train_data.label
     X_test, y_test = test_data[phecode_features_], test_data.label
+    logging.info(f'Number of training samples: {len(X_train)}')
+    logging.info(f'Number of testing samples: {len(X_test)}')
+    logging.info(f'Number of features: {len(phecode_features_)}')
 
     logging.info('Training the model...')
     final_model = train_model(X_train, y_train, model_type=model_type)

@@ -212,6 +212,16 @@ def main():
     # 1. Read the pairs file we just wrote
     pairs_df = pd.read_csv(result_fp, sep='\t')
 
+    # Remove cases that have no matched controls
+    control_cols = [c for c in pairs_df.columns if c != 'case']
+    has_controls = pairs_df[control_cols].notna().any(axis=1)
+    n_removed = (~has_controls).sum()
+    pairs_df = pairs_df[has_controls].reset_index(drop=True)
+    logging.info(f"Removed {n_removed} cases with no matched controls")
+
+    # Overwrite the pairs file without unmatched cases
+    pairs_df.to_csv(result_fp, sep='\t', index=False)
+
     # 2. Calculate the number of training cases
     n_cases = len(pairs_df)
     n_train = int(args.train_split_ratio * n_cases)

@@ -324,8 +324,8 @@ def plot_permutation_importance(
 def interpret_model(
     model: object, 
     data: pd.DataFrame, 
-    grid: str, 
-    phecode_map: dict, 
+    phecode_map: dict,
+    grid: str = None,
     output_path: Path = Path('.'), 
     prefix: str = 'output', 
     plot: str = 'waterfall', 
@@ -349,6 +349,7 @@ def interpret_model(
 
     # Helper: Find the row index for the given grid ID
     def find_index_of_grid(data, grid):
+        if grid is None: return None
         matches = data.index[data['grid'] == grid]
         return matches[0] if not matches.empty else None
 
@@ -370,7 +371,7 @@ def interpret_model(
     shap_values = explainer(X_phecode)
 
     idx = find_index_of_grid(data, grid)
-    if idx is None:
+    if idx is None and plot == 'waterfall':
         raise ValueError(f"Grid ID {grid} not found in data.")
 
     # Generate the requested SHAP plot
@@ -379,13 +380,19 @@ def interpret_model(
         shap.plots.waterfall(shap_values[idx, :, 1], show=show)
     elif plot == 'heatmap':
         shap.plots.heatmap(shap_values[:, :, 1], show=show)
+    elif plot == 'beeswarm':
+        shap.plots.beeswarm(shap_values[:, :, 1], show=show)
     else:
         raise ValueError(f"Unsupported plot type: {plot}")
 
     # Save the plot if not displaying interactively
     if not show:
-        plt.title(f'{plot.capitalize()} plot for {grid}')
-        out_file = output_path / f'{plot}_for_{grid}_{prefix}.png'
+        if plot == 'waterfall':
+            plt.title(f'{plot.capitalize()} plot for {grid}')
+            out_file = output_path / f'{plot}_for_{grid}_{prefix}.png'
+        else:
+            plt.title(f'{plot.capitalize()} plot')
+            out_file = output_path / f'{plot}_{prefix}.png'
         plt.savefig(out_file, bbox_inches='tight')
         plt.close()
-        logging.info(f"Saved {plot} plot for {grid} to {out_file}")
+        logging.info(f"Saved {plot} plot for {grid if grid else 'all'} to {out_file}")

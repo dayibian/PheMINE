@@ -1,4 +1,4 @@
-name: PheWES
+name: PheMINE
 channels:
   - defaults
   - conda-forge

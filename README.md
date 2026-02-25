@@ -1,5 +1,5 @@
-# PheWES & PheML
-PheWES is a fully automated, modular pipeline for conducting phenome-wide enrichment studies and machine-learning–based phenotype prediction. Built with Snakemake for workflow orchestration and Python for data processing and modeling, the system provides a reproducible and scalable framework for exploring clinical phenotypes derived from ICD and phecode mappings.
+# PheMINE
+PheMINE is a fully automated, modular pipeline for conducting phenome-wide enrichment studies and machine-learning–based phenotype prediction. Built with Snakemake for workflow orchestration and Python for data processing and modeling, the system provides a reproducible and scalable framework for exploring clinical phenotypes derived from ICD and phecode mappings.
 
 The pipeline includes robust modules for cohort construction, permutation-based phecode enrichment, and supervised learning models for disease prediction. Users configure workflows through a clean YAML-based interface, ensuring portability across systems and datasets. The project emphasizes reproducibility, software engineering best practices, and extensibility—supporting researchers who aim to transition from raw EHR data to statistically validated insights and deployable machine-learning outputs.
 
@@ -7,7 +7,6 @@ The pipeline includes robust modules for cohort construction, permutation-based 
 ```
 .
 ├── data/           # Data files
-├── notebooks/      # Jupyter notebooks
 ├── results/        # Output results
 └── src/           # Source code
 ```
@@ -33,7 +32,7 @@ The pipeline requires the following data files. Paths should be configured in `c
 1. Create and activate the conda environment using the provided environment.yaml:
 ```bash
 conda env create -f environment.yaml
-conda activate PheWES  # On Linux/Mac
+conda activate PheMINE  # On Linux/Mac
 ```
 
 *This will install all required dependencies as specified in environment.yaml.*
@@ -96,7 +95,11 @@ Below is an example of a SHAP waterfall plot, which breaks down the prediction f
 
 ![SHAP Waterfall Plot Example](assets/waterfall_test.png)
 
-This visualization allows researchers to identify which phecodes pushed the model's prediction towards a specific disease risk.
+Below is an example of a SHAP beeswarm plot, which summarizes the impact of features across multiple samples:
+
+![SHAP Beeswarm Plot Example](assets/beeswarm.png)
+
+These visualizations allow researchers to identify which phecodes pushed the model's prediction towards a specific disease risk.
 
 ### Generating Interpretations
 You can generate these plots programmatically using the `interpret_model` function:

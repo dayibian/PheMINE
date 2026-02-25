@@ -66,6 +66,7 @@ report.html
 .snakefile.lock
 src/generate_sample_data.py
 src/phecode_enrichment_preprocessing.py
+notebooks/
 
 # Other
 /writing/
