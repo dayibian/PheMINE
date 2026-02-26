@@ -88,6 +88,10 @@ Global feature importance highlights the most influential features across the en
 
 This plot is generated using the `plot_feature_importance` function from the `src.plotting` module. It's automatically generated when running the pipeline.
 
+Below is an example of a SHAP beeswarm plot, which summarizes the impact of features across multiple samples:
+
+![SHAP Beeswarm Plot Example](assets/beeswarm.png)
+
 ### Local Explanation
 For individual predictions, the pipeline uses **SHAP (SHapley Additive exPlanations)**. SHAP values quantify the contribution of each feature to a specific patient's risk score, offering a personalized explanation.
 
@@ -95,11 +99,7 @@ Below is an example of a SHAP waterfall plot, which breaks down the prediction f
 
 ![SHAP Waterfall Plot Example](assets/waterfall_test.png)
 
-Below is an example of a SHAP beeswarm plot, which summarizes the impact of features across multiple samples:
-
-![SHAP Beeswarm Plot Example](assets/beeswarm.png)
-
-These visualizations allow researchers to identify which phecodes pushed the model's prediction towards a specific disease risk.
+This visualization allows researchers to identify which phecodes pushed the model's prediction towards a specific disease risk.
 
 ### Generating Interpretations
 You can generate these plots programmatically using the `interpret_model` function:
